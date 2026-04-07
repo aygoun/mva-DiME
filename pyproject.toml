@@ -1,0 +1,37 @@
+[project]
+name = "dime"
+version = "0.1.0"
+description = "DiME - Diffusion Models for Counterfactual Explanations (image + audio)"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "torch>=1.9",
+    "torchvision",
+    "numpy",
+    "matplotlib",
+    "pyyaml",
+    "pandas",
+    "h5py",
+    "scipy",
+    "tqdm",
+    "blobfile",
+    "mpi4py",
+    "Pillow",
+    "librosa>=0.11.0",
+    "huggingface-hub>=0.36.2",
+]
+
+[project.optional-dependencies]
+audio = [
+    "librosa",
+    "soundfile",
+    "torchaudio",
+    "transformers",
+    "huggingface_hub",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest",
+    "ruff",
+]
