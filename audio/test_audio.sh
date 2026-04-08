@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-ESC50_DIR=dataset/ESC-50-master
+# ------------------------------------------------------------------
+# Generate counterfactual audio explanations on FSD50K
+# ------------------------------------------------------------------
+FSD50K_DIR=dataset/FSD50K
 GPU=0
 
 MODEL_FLAGS="--attention_resolutions 32,16,8 --class_cond False \
@@ -11,16 +14,14 @@ MODEL_FLAGS="--attention_resolutions 32,16,8 --class_cond False \
 SAMPLE_FLAGS="--batch_size 8 --timestep_respacing 200"
 
 python -W ignore -m audio.main_audio $MODEL_FLAGS $SAMPLE_FLAGS \
-    --data_dir "$ESC50_DIR" \
+    --data_dir "$FSD50K_DIR" \
+    --fsd50k_split eval \
     --model_path audio/models/ddpm-spectro/ema_0.9999_015000.pt \
-    --classifier_path audio/models/classifier_70.pth \
-    --classifier_type ast \
     --ast_model_id MIT/ast-finetuned-audioset-10-10-0.4593 \
-    --output_path audio/results_50_epochs/ \
-    --exp_name esc50_demo \
-    --num_classes 50 \
-    --dataset ESC50 \
-    --val_fold 5 \
+    --output_path audio/results \
+    --exp_name fsd50k_demo \
+    --target_label -1 \
+    --target_strategy random_remove \
     --start_step 60 \
     --classifier_scales '5,8,12' \
     --l1_loss 0.05 \
@@ -28,9 +29,9 @@ python -W ignore -m audio.main_audio $MODEL_FLAGS $SAMPLE_FLAGS \
     --l_perc_layer 8 \
     --use_logits False \
     --use_sampling_on_x_t True \
-    --target_label -1 \
+    --audio_duration 7.0 \
     --num_batches 5 \
     --seed 42 \
     --gpu $GPU \
     --save_audio True \
-    --save_images True 
+    --save_images True

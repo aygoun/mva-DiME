@@ -1,9 +1,9 @@
 """
-Fine-tune a pretrained image DDPM on mel-spectrogram data (Option B).
+Fine-tune a pretrained image DDPM on mel-spectrogram data.
 
 Loads the CelebA (or any other) DDPM checkpoint and continues training on
-spectrogram tensors.  No MPI / distributed setup required — runs on a single
-GPU.
+FSD50K spectrogram tensors.  No MPI / distributed setup required — runs on a
+single GPU.
 """
 
 import os
@@ -27,15 +27,16 @@ from core.resample import create_named_schedule_sampler
 from core.nn import update_ema
 from core.sample_utils import load_from_DDP_model
 
-from audio.audio_datasets import ESC50Dataset, infinite_audio_loader
+from audio.audio_datasets import FSD50KDataset, infinite_audio_loader
+from audio.audio_classifier import load_audioset_class_mapping
 
 
 def create_argparser():
     defaults = dict(
         # data
         data_dir="",
-        data_mode="folder",        # "folder" or "esc50"
-        audio_duration=5.0,
+        audio_duration=7.0,
+        fsd50k_split="dev",
         # training
         pretrained_path="models/ddpm-celeba.pt",
         output_dir="audio/models/ddpm-spectro",
@@ -51,7 +52,7 @@ def create_argparser():
     )
     defaults.update(model_and_diffusion_defaults())
     parser = argparse.ArgumentParser(
-        description="Fine-tune a pretrained DDPM on mel spectrograms")
+        description="Fine-tune a pretrained DDPM on FSD50K mel spectrograms")
     add_dict_to_argparser(parser, defaults)
     return parser
 
@@ -84,11 +85,12 @@ def main():
 
     # data
     print("Creating data loader ...")
-    if args.data_mode == "esc50":
-        dataset = ESC50Dataset(args.data_dir, duration=args.audio_duration,
-                               size=args.image_size)
-    else:
-        raise ValueError(f"Invalid data mode: {args.data_mode}")
+    mid_to_idx = load_audioset_class_mapping()
+    dataset = FSD50KDataset(
+        args.data_dir, split=args.fsd50k_split,
+        duration=args.audio_duration, size=args.image_size,
+        audioset_mid_to_idx=mid_to_idx,
+    )
     data_iter = infinite_audio_loader(dataset, batch_size=args.batch_size)
     print(f"  {len(dataset)} audio clips")
 
@@ -123,18 +125,16 @@ def main():
         pbar.set_postfix(loss=f"{loss.item():.4f}")
 
         if step % args.save_interval == 0 or step == args.steps:
-            # save weights
             ckpt_path = os.path.join(args.output_dir, f"model{step:06d}.pt")
             torch.save(model.state_dict(), ckpt_path)
 
-            # save EMA weights
             ema_state = {
                 name: param.data.clone()
                 for (name, _), param in zip(model.named_parameters(), ema_params)
             }
             ema_path = os.path.join(args.output_dir, f"ema_{ema_rate}_{step:06d}.pt")
             torch.save(ema_state, ema_path)
-            tqdm.write(f"  → saved checkpoint and EMA to {args.output_dir}")
+            tqdm.write(f"  -> saved checkpoint and EMA to {args.output_dir}")
 
     print("Fine-tuning complete.")
 

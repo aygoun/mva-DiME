@@ -88,6 +88,38 @@ def clean_multiclass_cond_fn(x_t, y, classifier,
 
 
 @torch.enable_grad()
+def clean_multilabel_cond_fn(x_t, y, classifier, s, use_logits, y_val=None):
+    '''
+    Classifier guidance for multi-label models (sigmoid per class).
+
+    :param x_t: clean instance
+    :param y: (B,) target class indices
+    :param classifier: multi-label classification model
+    :param s: scaling classifier gradients parameter
+    :param use_logits: compute the loss over the raw logits
+    :param y_val: (B,) target values — 1.0 to add/maximize the class,
+                  0.0 to remove/minimize it.  None defaults to 1.0 (add).
+    '''
+    x_in = x_t.detach().requires_grad_(True)
+    logits = classifier(x_in)
+
+    target_logits = logits[range(len(y)), y]
+
+    if y_val is not None:
+        target_logits = y_val * target_logits - (1 - y_val) * target_logits
+
+    if use_logits:
+        selected = -target_logits
+    else:
+        selected = -F.logsigmoid(target_logits)
+
+    selected = selected * s
+    grads = torch.autograd.grad(selected.sum(), x_in)[0]
+
+    return grads
+
+
+@torch.enable_grad()
 def dist_cond_fn(x_tau, z_t, x_t, alpha_t,
                  l1_loss, l2_loss,
                  l_perc):

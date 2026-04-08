@@ -4,9 +4,7 @@ compatible with the image-based DDPM from the original DiME pipeline.
 """
 
 import os
-import glob
 import pandas as pd
-import numpy as np
 
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -17,70 +15,129 @@ from .spectrogram_utils import (
     SAMPLE_RATE, SPEC_SIZE,
 )
 
-class ESC50Dataset(Dataset):
-    """ESC-50 environmental-sound dataset, served as mel-spectrogram tensors.
 
-    Expected folder layout (unzipped from the ESC-50 GitHub release)::
+NUM_AUDIOSET_CLASSES = 527
+
+
+class FSD50KDataset(Dataset):
+    """FSD50K multi-label sound-event dataset, served as mel-spectrogram tensors.
+
+    Each sample may carry **multiple** AudioSet labels.  Labels are returned as
+    a 527-dim multi-hot vector using AudioSet class indices so that the
+    pretrained AST model can be used directly without a custom head.
+
+    Expected folder layout (standard FSD50K release)::
 
         data_dir/
-            audio/          # 2000 .wav files
-            meta/
-                esc50.csv   # metadata with columns: filename, fold, target, category, ...
+            FSD50K.dev_audio/       # WAV files for development set
+            FSD50K.eval_audio/      # WAV files for evaluation set
+            FSD50K.ground_truth/
+                dev.csv             # fname,labels,mids,split
+                eval.csv            # fname,labels,mids
+                vocabulary.csv      # (index,label,mid) or headerless
 
     Parameters
     ----------
     data_dir : str
-        Root of the extracted ESC-50 dataset.
-    folds : list[int] or None
-        Which folds (1-5) to include.  ``None`` → all folds.
-    sr : int
-        Target sample rate.
-    duration : float
-        Clip length in seconds (ESC-50 clips are 5 s).
-    size : int
-        Spatial resolution of the output tensor (height = width).
+        Root of the extracted FSD50K dataset.
+    split : str
+        One of ``"train"``, ``"val"`` (subsets of dev), ``"dev"`` (all dev),
+        or ``"eval"``.
+    audioset_mid_to_idx : dict
+        Mapping ``{AudioSet_MID: model_output_index}`` (527 entries).
+        Obtain via :func:`audio.audio_classifier.load_audioset_class_mapping`.
     """
 
-    def __init__(self, data_dir, folds=None, sr=SAMPLE_RATE, duration=5.0,
-                 size=SPEC_SIZE, augment=False):
-        meta = pd.read_csv(os.path.join(data_dir, "meta", "esc50.csv"))
-        if folds is not None:
-            meta = meta[meta["fold"].isin(folds)]
-        meta = meta.reset_index(drop=True)
+    def __init__(self, data_dir, split="eval", sr=SAMPLE_RATE,
+                 duration=7.0, size=SPEC_SIZE, augment=False,
+                 audioset_mid_to_idx=None):
+        gt_dir = os.path.join(data_dir, "FSD50K.ground_truth")
 
-        self.audio_dir = os.path.join(data_dir, "audio")
-        self.filenames = meta["filename"].tolist()
-        self.targets = meta["target"].tolist()
-        self.categories = meta["category"].tolist()
+        # --- vocabulary ---
+        vocab = self._read_vocabulary(os.path.join(gt_dir, "vocabulary.csv"))
+        self.fsd50k_labels = vocab["label"].tolist()
+        self.fsd50k_mids = vocab["mid"].tolist()
+        self.num_fsd50k_classes = len(self.fsd50k_labels)
+
+        self.audioset_mid_to_idx = audioset_mid_to_idx or {}
+
+        self.valid_audioset_indices = sorted(
+            {self.audioset_mid_to_idx[m] for m in self.fsd50k_mids
+             if m in self.audioset_mid_to_idx}
+        )
+
+        # --- ground-truth split ---
+        if split in ("train", "val"):
+            df = pd.read_csv(os.path.join(gt_dir, "dev.csv"))
+            df = df[df["split"] == split]
+            audio_dir = os.path.join(data_dir, "FSD50K.dev_audio")
+        elif split == "dev":
+            df = pd.read_csv(os.path.join(gt_dir, "dev.csv"))
+            audio_dir = os.path.join(data_dir, "FSD50K.dev_audio")
+        elif split == "eval":
+            df = pd.read_csv(os.path.join(gt_dir, "eval.csv"))
+            audio_dir = os.path.join(data_dir, "FSD50K.eval_audio")
+        else:
+            raise ValueError(f"Unknown split: {split}")
+
+        df = df.reset_index(drop=True)
+        self.audio_dir = audio_dir
+        self.fnames = df["fname"].astype(str).tolist()
+
+        # --- parse multi-label annotations (using MIDs) ---
+        self.audioset_indices = []
+        for _, row in df.iterrows():
+            mids = [m.strip() for m in str(row["mids"]).split(",")]
+            as_idxs = [self.audioset_mid_to_idx[m] for m in mids
+                       if m in self.audioset_mid_to_idx]
+            self.audioset_indices.append(as_idxs)
+
         self.sr = sr
         self.duration = duration
         self.size = size
         self.augment = augment
+        self.num_classes = NUM_AUDIOSET_CLASSES
 
-        cats = sorted(set(self.categories))
-        self.cat_to_idx = {c: i for i, c in enumerate(cats)}
-        self.num_classes = len(cats)
+    @staticmethod
+    def _read_vocabulary(path):
+        """Read vocabulary.csv, handling both with-header and headerless."""
+        df = pd.read_csv(path)
+        if {"label", "mid"}.issubset(df.columns):
+            return df
+        df = pd.read_csv(path, header=None, names=["index", "label", "mid"])
+        return df
 
     def __len__(self):
-        return len(self.filenames)
+        return len(self.fnames)
 
     def __getitem__(self, idx):
-        path = os.path.join(self.audio_dir, self.filenames[idx])
+        path = os.path.join(self.audio_dir, f"{self.fnames[idx]}.wav")
 
-        if self.augment:
-            y = load_audio(path, sr=self.sr, duration=self.duration)
-            y = random_time_shift(y, sr=self.sr, max_shift_sec=0.4)
-            log_mel = audio_to_mel(y, sr=self.sr)
-            time_frames = log_mel.shape[1]
-            tensor = spec_to_tensor(log_mel, size=self.size)
-            tensor = spec_augment(tensor)
-        else:
-            tensor, time_frames = audio_to_tensor(
-                path, sr=self.sr, duration=self.duration, size=self.size,
+        try:
+            if self.augment:
+                y = load_audio(path, sr=self.sr, duration=self.duration)
+                y = random_time_shift(y, sr=self.sr, max_shift_sec=0.4)
+                log_mel = audio_to_mel(y, sr=self.sr)
+                time_frames = log_mel.shape[1]
+                tensor = spec_to_tensor(log_mel, size=self.size)
+                tensor = spec_augment(tensor)
+            else:
+                tensor, time_frames = audio_to_tensor(
+                    path, sr=self.sr, duration=self.duration, size=self.size,
+                )
+        except Exception:
+            # Corrupted / truncated WAV — return silence so the batch isn't lost
+            import numpy as np
+            tensor = spec_to_tensor(
+                np.full((128, 128), -80.0, dtype=np.float32), size=self.size,
             )
+            time_frames = self.size
 
-        label = self.targets[idx]
-        return tensor, label, time_frames
+        multi_hot = torch.zeros(NUM_AUDIOSET_CLASSES, dtype=torch.float32)
+        for aidx in self.audioset_indices[idx]:
+            multi_hot[aidx] = 1.0
+
+        return tensor, multi_hot, time_frames
 
 
 def infinite_audio_loader(dataset, batch_size, shuffle=True, num_workers=4):
@@ -92,7 +149,7 @@ def infinite_audio_loader(dataset, batch_size, shuffle=True, num_workers=4):
     )
     while True:
         for batch in loader:
-            if isinstance(batch, (list, tuple)) and len(batch) == 2:
-                yield batch[0], batch[1]
-            else:
+            if isinstance(batch, (list, tuple)) and len(batch) >= 2:
                 yield batch[0], {}
+            else:
+                yield batch, {}
