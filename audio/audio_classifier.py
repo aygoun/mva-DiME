@@ -1,9 +1,8 @@
 """
 Audio classifier for DiME counterfactual guidance.
 
-Uses the pretrained AST on AudioSet (527 multi-label classes).  FSD50K's 200
-classes are a strict subset, so no custom head is needed.
-"""
+Uses the pretrained AST on AudioSet (527 multi-label classes).
+git """
 
 import os
 import csv
@@ -50,12 +49,12 @@ def load_audioset_class_mapping(cache_path=AUDIOSET_LABELS_CACHE):
 class ASTAudioSetClassifier(nn.Module):
     """Pretrained AST on AudioSet with the original 527-class head.
 
-    Uses ``ASTForAudioClassification`` directly — no custom head is needed
-    because FSD50K's 200 classes are a **subset** of AudioSet's 527.  During
-    DiME guidance we simply index into the relevant output logit.
+    Accepts 1-channel or 3-channel spectrogram tensors, resizes to the
+    format AST expects (128 mel bins × 1024 time frames), and returns
+    527-class logits.
 
     Input:
-      x in [-1, 1], shape (B, 3, H, W)
+      x in [-1, 1], shape (B, C, H, W) with C in {1, 3}
     Output:
       logits of shape (B, 527)
     """
