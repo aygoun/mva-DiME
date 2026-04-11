@@ -302,6 +302,9 @@ ___*
 !.gitignore
 docs/private
 *.xsim
-data/
+/data/
 checkpoints/
 *.bbl-SAVE-ERROR
+lightning_logs/
+_out_test
+_out_train
