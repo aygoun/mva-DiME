@@ -308,3 +308,4 @@ checkpoints/
 lightning_logs/
 _out_test
 _out_train
+/checkpoints

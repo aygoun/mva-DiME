@@ -1,33 +1,30 @@
-from collections.abc import Sequence
+from pathlib import Path
+
 import lightning as L
 import litdata as ld  # type: ignore
 import torch
 from diffusers.pipelines.deprecated.audio_diffusion.mel import Mel
 from litdata import optimize
 from torchvision.transforms import v2  # type: ignore
-from datasets import Dataset  # type: ignore
+
 from dense_audio_classifier.data.irmas import INSTRUMENTS, IRMAS
-from pathlib import Path
 
 instrument_to_idx = {inst: i for i, inst in enumerate(INSTRUMENTS)}
 
 
-class HFDatasetWrapper(Sequence):
-    def __init__(self, ds: Dataset):
-        self.ds = ds
-
-    def __getitem__(self, idx):
-        return self.ds[idx]
-
-    def __len__(self):
-        return len(self.ds)
-
-
 class IRMASDataModule(L.LightningDataModule):
-    def __init__(self, index_path: str | None = None, batch_size: int = 32):
+    def __init__(
+        self,
+        index_path: str | None = None,
+        batch_size: int = 32,
+        num_workers: int = 0,
+        data_optimize_output_dir: Path = Path("data"),
+    ):
         super().__init__()
         self.index_path = index_path
         self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.data_optimize_output_dir = data_optimize_output_dir
         self.dataset_uri = "hf://datasets/confit/irmas/irmas.py"
         self.mel = Mel(
             sample_rate=44100,  # see https://www.upf.edu/web/mtg/irmas
@@ -59,25 +56,28 @@ class IRMASDataModule(L.LightningDataModule):
         return {"mel": mel_tensor, "label": label}
 
     def optimize(self):
-        if not (Path("data/_out_train").exists() and Path("data/_out_test").exists()):
+        if (
+            not (self.data_optimize_output_dir / "_out_train").exists()
+            and not (self.data_optimize_output_dir / "_out_test").exists()
+        ):
             builder = IRMAS()
             builder.download_and_prepare()
-            train_ds = builder.as_dataset("train").to_list()
-            test_ds = builder.as_dataset("test").to_list()
+            train_ds = builder.as_dataset("train").to_list()  # type: ignore
+            test_ds = builder.as_dataset("test").to_list()  # type: ignore
             optimize(
                 fn=self.transform,
                 inputs=train_ds,
-                output_dir="data/_out_train",
+                output_dir=str(self.data_optimize_output_dir / "_out_train"),
                 chunk_bytes="64MB",
-                num_workers=8,
+                num_workers=self.num_workers,
                 start_method="spawn",
             )
             optimize(
                 fn=self.transform,
                 inputs=test_ds,
-                output_dir="data/_out_test",
+                output_dir=str(self.data_optimize_output_dir / "_out_test"),
                 chunk_bytes="64MB",
-                num_workers=8,
+                num_workers=self.num_workers,
                 start_method="spawn",
             )
 
@@ -85,9 +85,12 @@ class IRMASDataModule(L.LightningDataModule):
         # download
         self.optimize()
         self.ds_train = ld.StreamingDataset(
-            "data/_out_train", index_path=self.index_path
+            str(self.data_optimize_output_dir / "_out_train"),
+            index_path=self.index_path,
         )
-        self.ds_test = ld.StreamingDataset("data/_out_test", index_path=self.index_path)
+        self.ds_test = ld.StreamingDataset(
+            str(self.data_optimize_output_dir / "_out_test"), index_path=self.index_path
+        )
 
     def train_dataloader(self):
         assert self.ds_train is not None, (
@@ -97,7 +100,7 @@ class IRMASDataModule(L.LightningDataModule):
             self.ds_train,
             batch_size=self.batch_size,
             shuffle=True,
-            num_workers=0,
+            num_workers=self.num_workers,
         )
 
     def test_dataloader(self):
@@ -109,5 +112,5 @@ class IRMASDataModule(L.LightningDataModule):
             self.ds_test,
             batch_size=self.batch_size,
             shuffle=False,
-            num_workers=0,
+            num_workers=self.num_workers,
         )

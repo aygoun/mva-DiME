@@ -105,19 +105,6 @@ class IRMAS(datasets.GeneratorBasedBuilder):
             ),
         )
 
-        # train_archive_path = cast(
-        #     str, dl_manager.download_and_extract(_IRMAS_TRAIN_SET_URL)
-        # )
-        # test_archive_part1_path = cast(
-        #     str, dl_manager.download_and_extract(_IRMAS_TEST_SET_PART1_URL)
-        # )
-        # test_archive_part2_path = cast(
-        #     str, dl_manager.download_and_extract(_IRMAS_TEST_SET_PART2_URL)
-        # )
-        # test_archive_part3_path = cast(
-        #     str, dl_manager.download_and_extract(_IRMAS_TEST_SET_PART3_URL)
-        # )
-
         extensions = [".wav"]
         _, _train_walker = fast_scandir(train_archive_path, extensions, recursive=True)
         _test_walker = []
