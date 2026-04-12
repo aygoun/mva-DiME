@@ -27,7 +27,7 @@ class IRMASDataModule(L.LightningDataModule):
         self.base_data = base_data
         self.dataset_uri = "hf://datasets/confit/irmas/irmas.py"
         self.mel = Mel(
-            sample_rate=44100,  # see https://www.upf.edu/web/mtg/irmas
+            sample_rate=22050,  # resampled to match audio-diffusion-breaks-256
             n_fft=2048,
             x_res=256,
             y_res=256,

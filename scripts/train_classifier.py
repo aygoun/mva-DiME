@@ -16,6 +16,7 @@ if __name__ == "__main__":
         mode="max",
         filename="dense_classifier_irmas-{epoch:02d}-{train_acc_epoch:.2f}",
         save_top_k=1,
+        save_last=True,
     )
     wandb_logger = WandbLogger(
         project="xai-dime",
@@ -26,17 +27,17 @@ if __name__ == "__main__":
 
     trainer = Trainer(
         accelerator="cuda",
-        max_epochs=200,
+        max_epochs=100,
         callbacks=[model_checkpoint],
         logger=wandb_logger,
-        devices=4,
+        devices=1,
         num_nodes=1,
     )
     model = DenseAudioClassifier()
     datamodule = IRMASDataModule(
         batch_size=32,
-        num_workers=10,
-        base_data=Path("/gpfs/workdir/sassis/data/"),
+        num_workers=4,
+        base_data=Path("notebooks/data"),
     )
 
     trainer.fit(model, datamodule=datamodule)
