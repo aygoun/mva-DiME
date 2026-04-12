@@ -3,6 +3,7 @@
 """IRMAS dataset."""
 
 import os
+from pathlib import Path
 import re
 import textwrap
 from typing import Any, Iterator, cast
@@ -88,22 +89,30 @@ class IRMAS(datasets.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
+        if self._output_dir is not None:
+            train = Path(self._output_dir) / "IRMAS-TrainingData.zip"
+            test1 = Path(self._output_dir) / "IRMAS-TestingData-Part1.zip"
+            test2 = Path(self._output_dir) / "IRMAS-TestingData-Part2.zip"
+            test3 = Path(self._output_dir) / "IRMAS-TestingData-Part3.zip"
+
+            if all(p.exists() for p in [train, test1, test2, test3]):
+                paths = [train, test1, test2, test3]
+            else:
+                raise RuntimeError("IRMAS dataset not fully present locally.")
+        else:
+            paths = [
+                _IRMAS_TRAIN_SET_URL,
+                _IRMAS_TEST_SET_PART1_URL,
+                _IRMAS_TEST_SET_PART2_URL,
+                _IRMAS_TEST_SET_PART3_URL,
+            ]
+
         (
             train_archive_path,
             test_archive_part1_path,
             test_archive_part2_path,
             test_archive_part3_path,
-        ) = cast(
-            tuple[str, str, str, str],
-            dl_manager.download_and_extract(
-                [
-                    _IRMAS_TRAIN_SET_URL,
-                    _IRMAS_TEST_SET_PART1_URL,
-                    _IRMAS_TEST_SET_PART2_URL,
-                    _IRMAS_TEST_SET_PART3_URL,
-                ]
-            ),
-        )
+        ) = dl_manager.download_and_extract(paths)
 
         extensions = [".wav"]
         _, _train_walker = fast_scandir(train_archive_path, extensions, recursive=True)
