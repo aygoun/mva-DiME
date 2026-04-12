@@ -56,7 +56,10 @@ class IRMASDataModule(L.LightningDataModule):
         return {"mel": mel_tensor, "label": label}
 
     def optimize(self):
-        if True:
+        if (
+            not (self.data_optimize_output_dir / "_out_train").exists()
+            and not (self.data_optimize_output_dir / "_out_test").exists()
+        ):
             builder = IRMAS()
             builder.download_and_prepare(
                 output_dir=str(self.data_optimize_output_dir),

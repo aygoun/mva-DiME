@@ -30,7 +30,7 @@ export WANDB_CACHE_DIR=$WORKDIR/wandb_cache
 export WANDB_DIR=$WORKDIR/wandb
 export WANDB_DATA_DIR=$WORKDIR/wandb_data
 export HF_HOME=$WORKDIR/hf
-
+export HF_DATASETS_AUDIO_BACKEND=soundfile
 
 
 # on your cluster you might need these:
