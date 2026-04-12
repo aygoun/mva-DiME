@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import re
 import textwrap
-from typing import Any, Iterator, cast
+from typing import Any, Iterator
 import datasets  # type: ignore
 from datasets.builder import Key  # type: ignore
 
@@ -39,19 +39,30 @@ INSTRUMENTS = [
 ]
 
 
-class IRMASConfig(datasets.BuilderConfig):
-    """BuilderConfig for IRMAS."""
-
-    def __init__(self, features, **kwargs):
-        super(IRMASConfig, self).__init__(
-            version=datasets.Version("0.0.1", ""), **kwargs
-        )
-        self.features = features
-
-
 class IRMAS(datasets.GeneratorBasedBuilder):
     BUILDER_CONFIGS = [
-        IRMASConfig(
+        datasets.BuilderConfig(
+            name="irmas",
+            description=textwrap.dedent(
+                """\
+                IRMAS is intended to be used for training and 
+                testing methods for the automatic recognition of predominant instruments in musical audio. 
+                The instruments considered are: cello, clarinet,
+                 flute, acoustic guitar, electric guitar, organ, piano, saxophone, trumpet, violin, and human singing voice.
+                """
+            ),
+            version=datasets.Version("0.0.1", ""),
+        ),
+    ]
+
+    def __init__(self, zip_dir=None, *args, **kwargs):
+        self.zip_dir = zip_dir
+        super().__init__(*args, **kwargs)
+        # get zip dir from args
+
+    def _info(self):
+        return datasets.DatasetInfo(
+            description="",
             features=datasets.Features(
                 {
                     "file": datasets.Value("string"),
@@ -60,25 +71,6 @@ class IRMAS(datasets.GeneratorBasedBuilder):
                     "label": datasets.Sequence(datasets.ClassLabel(names=INSTRUMENTS)),
                 }
             ),
-            name="irmas",
-            description=textwrap.dedent(
-                """\
-                IRMAS is intended to be used for training and testing methods for the automatic recognition of predominant instruments in musical audio. 
-                The instruments considered are: cello, clarinet, flute, acoustic guitar, electric guitar, organ, piano, saxophone, trumpet, violin, and human singing voice.
-                """
-            ),
-        ),
-    ]
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # get zip dir from args
-        self.zip_dir = kwargs.get("zip_dir", None)
-
-    def _info(self):
-        return datasets.DatasetInfo(
-            description="",
-            features=self.BUILDER_CONFIGS[0].features,
             supervised_keys=None,
             homepage="https://zenodo.org/records/1290750",
             citation="""
