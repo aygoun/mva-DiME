@@ -18,13 +18,13 @@ class IRMASDataModule(L.LightningDataModule):
         index_path: str | None = None,
         batch_size: int = 32,
         num_workers: int = 0,
-        data_optimize_output_dir: Path = Path("data"),
+        base_data: Path = Path("data"),
     ):
         super().__init__()
         self.index_path = index_path
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.data_optimize_output_dir = data_optimize_output_dir
+        self.base_data = base_data
         self.dataset_uri = "hf://datasets/confit/irmas/irmas.py"
         self.mel = Mel(
             sample_rate=44100,  # see https://www.upf.edu/web/mtg/irmas
@@ -57,20 +57,20 @@ class IRMASDataModule(L.LightningDataModule):
 
     def optimize(self):
         if (
-            not (self.data_optimize_output_dir / "_out_train").exists()
-            and not (self.data_optimize_output_dir / "_out_test").exists()
+            not (self.base_data / "_out_train").exists()
+            and not (self.base_data / "_out_test").exists()
         ):
             builder = IRMAS()
             builder.download_and_prepare(
-                output_dir=str(self.data_optimize_output_dir),
-                base_path=str(self.data_optimize_output_dir),
+                output_dir=str(self.base_data / "_raw"),
+                base_path=str(self.base_data / "_raw"),
             )
             train_ds = builder.as_dataset("train").to_list()  # type: ignore
             test_ds = builder.as_dataset("test").to_list()  # type: ignore
             optimize(
                 fn=self.transform,
                 inputs=train_ds,
-                output_dir=str(self.data_optimize_output_dir / "_out_train"),
+                output_dir=str(self.base_data / "_out_train"),
                 chunk_bytes="64MB",
                 num_workers=self.num_workers,
                 start_method="spawn",
@@ -78,7 +78,7 @@ class IRMASDataModule(L.LightningDataModule):
             optimize(
                 fn=self.transform,
                 inputs=test_ds,
-                output_dir=str(self.data_optimize_output_dir / "_out_test"),
+                output_dir=str(self.base_data / "_out_test"),
                 chunk_bytes="64MB",
                 num_workers=self.num_workers,
                 start_method="spawn",
@@ -88,11 +88,11 @@ class IRMASDataModule(L.LightningDataModule):
         # download
         self.optimize()
         self.ds_train = ld.StreamingDataset(
-            str(self.data_optimize_output_dir / "_out_train"),
+            str(self.base_data / "_out_train"),
             index_path=self.index_path,
         )
         self.ds_test = ld.StreamingDataset(
-            str(self.data_optimize_output_dir / "_out_test"), index_path=self.index_path
+            str(self.base_data / "_out_test"), index_path=self.index_path
         )
 
     def train_dataloader(self):
