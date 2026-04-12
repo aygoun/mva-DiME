@@ -35,7 +35,7 @@ model = DenseAudioClassifier()
 datamodule = IRMASDataModule(
     batch_size=32,
     num_workers=10,
-    data_optimize_output_dir=Path("/gpfs/workdir/sassis/data/"),
+    base_data=Path("/gpfs/workdir/sassis/data/"),
 )
 
 

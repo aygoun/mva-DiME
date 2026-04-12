@@ -26,6 +26,7 @@ class DenseAudioClassifier(L.LightningModule):
         x: torch.Tensor
         y: torch.Tensor
         x, y = batch["mel"], batch["label"]
+        y = y.float()
         x = x.repeat(1, 3, 1, 1)
         logits = self(x)
         loss = self.criterion(logits, y)
@@ -38,6 +39,7 @@ class DenseAudioClassifier(L.LightningModule):
         x: torch.Tensor
         y: torch.Tensor
         x, y = batch["mel"], batch["label"]
+        y = y.float()
         x = x.repeat(1, 3, 1, 1)
         logits = self(x)
         loss = self.criterion(logits, y)

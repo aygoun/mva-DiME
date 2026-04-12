@@ -60,10 +60,9 @@ class IRMASDataModule(L.LightningDataModule):
             not (self.base_data / "_out_train").exists()
             and not (self.base_data / "_out_test").exists()
         ):
-            builder = IRMAS()
+            builder = IRMAS(zip_dir=str(self.base_data / "_zip"))
             builder.download_and_prepare(
                 output_dir=str(self.base_data / "_raw"),
-                base_path=str(self.base_data / "_raw"),
             )
             train_ds = builder.as_dataset("train").to_list()  # type: ignore
             test_ds = builder.as_dataset("test").to_list()  # type: ignore
