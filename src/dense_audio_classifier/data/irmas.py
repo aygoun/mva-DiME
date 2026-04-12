@@ -46,9 +46,11 @@ class IRMAS(datasets.GeneratorBasedBuilder):
             description=textwrap.dedent(
                 """\
                 IRMAS is intended to be used for training and 
-                testing methods for the automatic recognition of predominant instruments in musical audio. 
+                testing methods for the automatic recognition
+                  of predominant instruments in musical audio. 
                 The instruments considered are: cello, clarinet,
-                 flute, acoustic guitar, electric guitar, organ, piano, saxophone, trumpet, violin, and human singing voice.
+                 flute, acoustic guitar, electric guitar, organ,
+                   piano, saxophone, trumpet, violin, and human singing voice.
                 """
             ),
             version=datasets.Version("0.0.1", ""),
@@ -95,7 +97,13 @@ class IRMAS(datasets.GeneratorBasedBuilder):
             if all(p.exists() for p in [train, test1, test2, test3]):
                 paths = [train, test1, test2, test3]
             else:
-                raise RuntimeError("IRMAS dataset not fully present locally.")
+                paths = [
+                    _IRMAS_TRAIN_SET_URL,
+                    _IRMAS_TEST_SET_PART1_URL,
+                    _IRMAS_TEST_SET_PART2_URL,
+                    _IRMAS_TEST_SET_PART3_URL,
+                ]
+                print("IRMAS dataset not fully present locally.")
         else:
             paths = [
                 _IRMAS_TRAIN_SET_URL,

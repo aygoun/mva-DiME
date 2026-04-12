@@ -27,7 +27,6 @@ dependencies = [
     "triton-windows>=3.4.0.post21 ; platform_system == 'Windows'",
     "impi-rt>=2021.17.2",
     "polars>=1.36.1",
-    "torchcodec>=0.11.0",
     "wandb>=0.25.1",
 ]
 authors = [
