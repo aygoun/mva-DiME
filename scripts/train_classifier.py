@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import wandb
 from lightning import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -33,6 +35,7 @@ model = DenseAudioClassifier()
 datamodule = IRMASDataModule(
     batch_size=32,
     num_workers=10,
+    data_optimize_output_dir=Path("/gpfs/workdir/sassis/data/"),
 )
 
 
