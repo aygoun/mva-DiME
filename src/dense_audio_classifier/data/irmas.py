@@ -55,7 +55,7 @@ class IRMAS(datasets.GeneratorBasedBuilder):
             features=datasets.Features(
                 {
                     "file": datasets.Value("string"),
-                    "audio": datasets.Audio(sampling_rate=SAMPLE_RATE),
+                    "audio": datasets.Value("string"),
                     "instrument": datasets.Sequence(datasets.Value("string")),
                     "label": datasets.Sequence(datasets.ClassLabel(names=INSTRUMENTS)),
                 }
