@@ -35,7 +35,7 @@ class DenseAudioClassifier(L.LightningModule):
         self.log("train_acc_epoch", self.train_accuracy, on_step=False, on_epoch=True)
         return loss
 
-    def test_step(self, batch, batch_idx) -> torch.Tensor:
+    def validation_step(self, batch, batch_idx) -> torch.Tensor:
         x: torch.Tensor
         y: torch.Tensor
         x, y = batch["mel"], batch["label"]
@@ -45,9 +45,9 @@ class DenseAudioClassifier(L.LightningModule):
         loss = self.criterion(logits, y)
         # class accuracy
 
-        self.log("test_loss", loss, on_step=True, on_epoch=True)
+        self.log("val_loss", loss, on_step=True, on_epoch=True)
+        self.log("val_acc", self.test_accuracy, on_step=True, on_epoch=True)
         self.test_accuracy(logits, y)
-        self.log("test_acc_epoch", self.test_accuracy, on_step=False, on_epoch=True)
         return loss
 
     def configure_optimizers(self):

@@ -105,7 +105,7 @@ class IRMASDataModule(L.LightningDataModule):
             num_workers=self.num_workers,
         )
 
-    def test_dataloader(self):
+    def val_dataloader(self):
         assert self.ds_test is not None, (
             "Dataset not prepared. Call prepare_data() first."
         )

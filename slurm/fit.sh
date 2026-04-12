@@ -31,7 +31,7 @@ export WANDB_DIR=$WORKDIR/wandb
 export WANDB_DATA_DIR=$WORKDIR/wandb_data
 export HF_HOME=$WORKDIR/hf
 export HF_DATASETS_AUDIO_BACKEND=soundfile
-export MASTER_PORT=29510
+export MASTER_PORT=$((20000 + SLURM_JOB_ID % 40000))
 
 # on your cluster you might need these:
 # set the network interface
