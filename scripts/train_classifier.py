@@ -36,7 +36,7 @@ if __name__ == "__main__":
     model = DenseAudioClassifier()
     datamodule = IRMASDataModule(
         batch_size=32,
-        num_workers=4,
+        num_workers=1,
         base_data=Path("notebooks/data"),
     )
 

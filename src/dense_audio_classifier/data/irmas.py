@@ -27,6 +27,7 @@ _IRMAS_TEST_SET_PART3_URL = (
 INSTRUMENTS = [
     "cel",
     "cla",
+    "dru",
     "flu",
     "gac",
     "gel",
