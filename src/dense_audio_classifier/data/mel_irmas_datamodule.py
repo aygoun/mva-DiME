@@ -61,7 +61,7 @@ class IRMASDataModule(L.LightningDataModule):
             and not (self.data_optimize_output_dir / "_out_test").exists()
         ):
             builder = IRMAS()
-            builder.download_and_prepare()
+            builder.download_and_prepare(output_dir=str(self.data_optimize_output_dir))
             train_ds = builder.as_dataset("train").to_list()  # type: ignore
             test_ds = builder.as_dataset("test").to_list()  # type: ignore
             optimize(
