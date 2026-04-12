@@ -89,11 +89,11 @@ class IRMAS(datasets.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
-        if self._output_dir is not None:
-            train = Path(self._output_dir) / "IRMAS-TrainingData.zip"
-            test1 = Path(self._output_dir) / "IRMAS-TestingData-Part1.zip"
-            test2 = Path(self._output_dir) / "IRMAS-TestingData-Part2.zip"
-            test3 = Path(self._output_dir) / "IRMAS-TestingData-Part3.zip"
+        if dl_manager._base_path is not None:
+            train = Path(dl_manager._base_path) / "IRMAS-TrainingData.zip"
+            test1 = Path(dl_manager._base_path) / "IRMAS-TestingData-Part1.zip"
+            test2 = Path(dl_manager._base_path) / "IRMAS-TestingData-Part2.zip"
+            test3 = Path(dl_manager._base_path) / "IRMAS-TestingData-Part3.zip"
 
             if all(p.exists() for p in [train, test1, test2, test3]):
                 paths = [train, test1, test2, test3]
