@@ -29,6 +29,7 @@ export NCCL_SOCKET_IFNAME=^docker0,lo
 export WANDB_CACHE_DIR=$WORKDIR/wandb_cache
 export WANDB_DIR=$WORKDIR/wandb
 export WANDB_DATA_DIR=$WORKDIR/wandb_data
+export HF_HOME=$WORKDIR/hf
 
 
 
