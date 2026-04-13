@@ -1,3 +1,4 @@
+from functools import partial
 from pathlib import Path
 
 import lightning as L
@@ -12,12 +13,25 @@ from dense_audio_classifier.data.irmas import INSTRUMENTS, IRMAS
 instrument_to_idx = {inst: i for i, inst in enumerate(INSTRUMENTS)}
 
 
+def _transform_irmas(audio: dict, mel: Mel, transform_slice: v2.Compose) -> dict:
+    """Standalone function so litdata workers only pickle mel/transform_slice,
+    not the entire LightningDataModule (which carries a trainer/wandb reference)."""
+    mel.load_audio(audio["file"])
+    mel_image = mel.audio_slice_to_image(0)
+    mel_tensor = transform_slice(mel_image)
+    label = torch.zeros(len(INSTRUMENTS), dtype=torch.float32)
+    label[[instrument_to_idx[i] for i in audio["instrument"]]] = 1.0
+    mask = torch.ones(len(INSTRUMENTS), dtype=torch.float32)
+    return {"mel": mel_tensor, "label": label, "mask": mask}
+
+
 class IRMASDataModule(L.LightningDataModule):
     def __init__(
         self,
         index_path: str | None = None,
         batch_size: int = 32,
         num_workers: int = 0,
+        num_workers_optimize: int = 1,
         base_data: Path = Path("data"),
     ):
         super().__init__()
@@ -43,18 +57,6 @@ class IRMASDataModule(L.LightningDataModule):
         self.ds_train: ld.StreamingDataset | None = None
         self.ds_test: ld.StreamingDataset | None = None
 
-    def transform(self, audio):
-        self.mel.load_audio(audio["file"])
-        mel_image = self.mel.audio_slice_to_image(
-            0
-        )  # Get the first slice as an example
-        # Convert the PIL Image to a tensor and normalize
-        mel_tensor = self.transform_slice(mel_image)
-        # tensor multi label, e.g. [0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0] for "cel" and "gel"
-        label = torch.zeros(len(INSTRUMENTS), dtype=torch.int)
-        label[[instrument_to_idx[i] for i in audio["instrument"]]] = 1
-        return {"mel": mel_tensor, "label": label}
-
     def optimize(self):
         if (
             not (self.base_data / "_out_train").exists()
@@ -66,8 +68,11 @@ class IRMASDataModule(L.LightningDataModule):
             )
             train_ds = builder.as_dataset("train").to_list()  # type: ignore
             test_ds = builder.as_dataset("test").to_list()  # type: ignore
+            fn = partial(
+                _transform_irmas, mel=self.mel, transform_slice=self.transform_slice
+            )
             optimize(
-                fn=self.transform,
+                fn=fn,
                 inputs=train_ds,
                 output_dir=str(self.base_data / "_out_train"),
                 chunk_bytes="64MB",
@@ -75,7 +80,7 @@ class IRMASDataModule(L.LightningDataModule):
                 start_method="spawn",
             )
             optimize(
-                fn=self.transform,
+                fn=fn,
                 inputs=test_ds,
                 output_dir=str(self.base_data / "_out_test"),
                 chunk_bytes="64MB",
