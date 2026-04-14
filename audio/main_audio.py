@@ -36,7 +36,6 @@ from audio.cnn14_perceptual import CNN14PerceptualLoss
 from audio.diffusers_wrapper import load_audio_diffusion
 from audio.audio_datasets import AudioDiffusionBreaksDataset
 from audio.audio_classifier import build_classifier
-from dense_audio_classifier.data.irmas import INSTRUMENTS
 from audio.spectrogram_utils import tensor_to_audio, SAMPLE_RATE
 
 
@@ -65,13 +64,13 @@ def create_args():
         # classifier
         classifier_checkpoint_path="checkpoints/last.ckpt",
         wandb_artifact="",
-        num_classes=len(INSTRUMENTS),
+        num_classes=0,
 
         # sampling
         classifier_scales="5,8,12",
         seed=42,
         target_label=-1,
-        target_strategy="random_remove",
+        target_strategy="random_add",
         start_step=120,
         use_logits=False,
         l1_loss=0.05,
@@ -214,7 +213,7 @@ def main():
     print("Loading classifier ...")
     classifier = build_classifier(
         checkpoint_path=args.classifier_checkpoint_path,
-        num_classes=args.num_classes,
+        num_classes=args.num_classes or None,
         wandb_artifact=args.wandb_artifact or None,
     ).to(device)
     classifier.eval()

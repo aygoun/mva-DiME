@@ -10,7 +10,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from audio.audio_datasets import AudioDiffusionBreaksDataset
 from audio.audio_classifier import build_classifier
-from dense_audio_classifier.data.irmas import INSTRUMENTS
+from dense_audio_classifier.data.irmas import INSTRUMENTS as IRMAS_INSTRUMENTS
+from dense_audio_classifier.data.mel_openmic_datamodule import INSTRUMENTS as OPENMIC_INSTRUMENTS
 
 
 def main():
@@ -26,10 +27,10 @@ def main():
     parser.add_argument("--gpu", type=str, default="0")
     parser.add_argument("--checkpoint_path", type=str, default="",
                         help="Path to DenseAudioClassifier checkpoint (.ckpt)")
-    parser.add_argument("--wandb_artifact", type=str, default="",
+    parser.add_argument("--wandb_artifact", type=str, default="mva-altegrad-challenge/xai-dime/train_dense_classifier_openmic:v0",
                         help="W&B artifact reference: entity/project/artifact:version")
-    parser.add_argument("--num_classes", type=int, default=len(INSTRUMENTS),
-                        help="Number of output classes in checkpoint")
+    parser.add_argument("--num_classes", type=int, default=0,
+                        help="Number of output classes (0 = auto-detect from checkpoint)")
     parser.add_argument("--dataset_repo", type=str,
                         default="teticio/audio-diffusion-breaks-256")
     args = parser.parse_args()
@@ -37,15 +38,19 @@ def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 
-    idx_to_name = {i: name for i, name in enumerate(INSTRUMENTS)}
-
     print("Loading classifier ...")
     classifier = build_classifier(
         checkpoint_path=args.checkpoint_path or None,
-        num_classes=args.num_classes,
+        num_classes=args.num_classes or None,
         wandb_artifact=args.wandb_artifact or None,
     ).to(device)
     classifier.eval()
+
+    nc = classifier.num_classes
+    if nc == len(OPENMIC_INSTRUMENTS):
+        idx_to_name = {v: k for k, v in OPENMIC_INSTRUMENTS.items()}
+    else:
+        idx_to_name = {i: name for i, name in enumerate(IRMAS_INSTRUMENTS)}
 
     dataset = AudioDiffusionBreaksDataset(
         repo_id=args.dataset_repo,

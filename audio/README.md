@@ -49,7 +49,6 @@ python -W ignore -m audio.main_audio \
     --ddpm_repo teticio/audio-diffusion-breaks-256 \
     --dataset_repo teticio/audio-diffusion-breaks-256 \
     --classifier_checkpoint_path checkpoints/last.ckpt \
-    --num_classes 12 \
     --max_samples 200 \
     --output_path audio/results --exp_name breaks_demo \
     --target_strategy random_remove \
@@ -64,8 +63,7 @@ python -W ignore -m audio.main_audio \
     --ddpm_repo teticio/audio-diffusion-breaks-256 \
     --dataset_repo teticio/audio-diffusion-breaks-256 \
     --classifier_checkpoint_path "" \
-    --wandb_artifact entity/project/artifact_name:latest \
-    --num_classes 12 \
+    --wandb_artifact mva-altegrad-challenge/xai-dime/train_dense_classifier_openmic:v0 \
     --max_samples 200 --num_batches 5 --gpu 0
 ```
 
@@ -108,7 +106,7 @@ audio/results/breaks_demo/
 | `--dataset_repo` | `teticio/audio-diffusion-breaks-256` | HF dataset repo |
 | `--classifier_checkpoint_path` | `checkpoints/last.ckpt` | Local checkpoint path, or `wandb://...` URI |
 | `--wandb_artifact` | `""` | W&B artifact ref: `entity/project/artifact:version` |
-| `--num_classes` | `12` | Number of output classes in the loaded checkpoint |
+| `--num_classes` | `0` (auto) | Number of output classes (0 = auto-detect from checkpoint) |
 | `--max_samples` | `0` (all) | Cap dataset size for quick tests |
 | `--target_label` | `-1` | Fixed classifier class index, or `-1` for auto |
 | `--target_strategy` | `random_remove` | See table above |
