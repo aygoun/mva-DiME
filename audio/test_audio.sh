@@ -5,7 +5,8 @@ python -W ignore -m audio.main_audio \
     --ddpm_repo teticio/audio-diffusion-breaks-256 \
     --dataset_repo teticio/audio-diffusion-breaks-256 \
     --max_samples 200 \
-    --ast_model_id MIT/ast-finetuned-audioset-10-10-0.4593 \
+    --classifier_checkpoint_path checkpoints/last.ckpt \
+    --num_classes 12 \
     --output_path audio/results \
     --exp_name breaks_demo \
     --target_label -1 \

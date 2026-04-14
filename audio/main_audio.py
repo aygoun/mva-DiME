@@ -6,7 +6,7 @@ classifier's prediction for a **single** target class, using the
 diffusion-guided process from DiME.
 
 DDPM      : teticio/audio-diffusion-breaks-256 (diffusers, 1-ch 256×256)
-Classifier: Pretrained AST on AudioSet (527-class sigmoid output)
+Classifier: DenseAudioClassifier checkpoint (multi-label sigmoid output)
 Dataset   : teticio/audio-diffusion-breaks-256 (pre-computed spectrograms)
 
 Use-case  : remove / add a sound in music  (e.g. remove guitar, add drums).
@@ -34,8 +34,9 @@ from core.sample_utils import (
 
 from audio.cnn14_perceptual import CNN14PerceptualLoss
 from audio.diffusers_wrapper import load_audio_diffusion
-from audio.audio_datasets import AudioDiffusionBreaksDataset, NUM_AUDIOSET_CLASSES
-from audio.audio_classifier import build_classifier, ensure_hf_model_downloaded
+from audio.audio_datasets import AudioDiffusionBreaksDataset
+from audio.audio_classifier import build_classifier
+from dense_audio_classifier.data.irmas import INSTRUMENTS
 from audio.spectrogram_utils import tensor_to_audio, SAMPLE_RATE
 
 
@@ -62,7 +63,9 @@ def create_args():
         max_samples=0,
 
         # classifier
-        ast_model_id="MIT/ast-finetuned-audioset-10-10-0.4593",
+        classifier_checkpoint_path="checkpoints/last.ckpt",
+        wandb_artifact="",
+        num_classes=len(INSTRUMENTS),
 
         # sampling
         classifier_scales="5,8,12",
@@ -126,10 +129,10 @@ def select_targets(logits, strategy, fixed_label=-1):
 
     Returns
     -------
-    targets : (B,) LongTensor — AudioSet class indices
+    targets : (B,) LongTensor — class indices
     y_vals  : (B,) FloatTensor — 1.0 = add class, 0.0 = remove class
     """
-    B = logits.size(0)
+    B, num_classes = logits.shape
     device = logits.device
     targets = torch.zeros(B, dtype=torch.long, device=device)
     y_vals = torch.ones(B, dtype=torch.float32, device=device)
@@ -139,6 +142,11 @@ def select_targets(logits, strategy, fixed_label=-1):
         positive = (probs[i] > 0.5).nonzero(as_tuple=True)[0].tolist()
 
         if fixed_label >= 0:
+            if fixed_label >= num_classes:
+                raise ValueError(
+                    f"target_label={fixed_label} is out of range for classifier with "
+                    f"{num_classes} classes."
+                )
             targets[i] = fixed_label
             y_vals[i] = 0.0 if fixed_label in positive else 1.0
             continue
@@ -153,7 +161,7 @@ def select_targets(logits, strategy, fixed_label=-1):
             targets[i] = c
             y_vals[i] = 0.0
         elif strategy == "random_add":
-            negative = [c for c in range(NUM_AUDIOSET_CLASSES) if c not in positive]
+            negative = [c for c in range(num_classes) if c not in positive]
             if negative:
                 c = random.choice(negative)
                 targets[i] = c
@@ -204,8 +212,11 @@ def main():
 
     # ---- classifier ----
     print("Loading classifier ...")
-    ensure_hf_model_downloaded(args.ast_model_id)
-    classifier = build_classifier(ast_model_id=args.ast_model_id).to(device)
+    classifier = build_classifier(
+        checkpoint_path=args.classifier_checkpoint_path,
+        num_classes=args.num_classes,
+        wandb_artifact=args.wandb_artifact or None,
+    ).to(device)
     classifier.eval()
 
     # ---- perceptual loss (CNN14 — native 1-channel) ----
@@ -397,7 +408,7 @@ def main():
     summary = (
         f"DDPM: {args.ddpm_repo}\n"
         f"Dataset: {args.dataset_repo}\n"
-        f"Classifier: AST AudioSet (527 classes)\n"
+        f"Classifier checkpoint: {args.classifier_checkpoint_path}\n"
         f"Target strategy: {args.target_strategy}\n"
         f"Total samples: {stats['n']}\n"
         f"Clean positive rate: {100*clean_rate:.1f}%\n"

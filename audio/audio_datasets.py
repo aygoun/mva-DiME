@@ -2,16 +2,13 @@
 Dataset loader for teticio/audio-diffusion-breaks-256.
 
 Each sample is a pre-computed 256×256 grayscale mel spectrogram (PIL Image)
-of a ~5 s breakbeat music slice.  No labels are stored — the AST classifier
-provides pseudo-labels at inference time.
+of a ~5 s breakbeat music slice. No labels are stored — the external
+classifier provides pseudo-labels at inference time.
 """
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-
-
-NUM_AUDIOSET_CLASSES = 527
 
 
 class AudioDiffusionBreaksDataset(Dataset):

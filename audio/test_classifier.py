@@ -1,15 +1,7 @@
-"""
-Test the AST classifier on spectrograms from the audio-diffusion dataset.
-
-Usage:
-    python -m audio.test_classifier
-    python -m audio.test_classifier --num_samples 20 --top_k 15
-    python -m audio.test_classifier --threshold 0.3
-"""
+"""Test a DenseAudioClassifier checkpoint on mel spectrogram samples."""
 
 import os
 import sys
-import csv
 import argparse
 
 import torch
@@ -17,35 +9,13 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from audio.audio_datasets import AudioDiffusionBreaksDataset
-from audio.audio_classifier import (
-    build_classifier,
-    ensure_hf_model_downloaded,
-    AUDIOSET_LABELS_CACHE,
-    AUDIOSET_LABELS_URL,
-)
-
-
-def load_audioset_index_to_name(cache_path=AUDIOSET_LABELS_CACHE):
-    """Return ``{int_index: display_name}`` for all 527 AudioSet classes."""
-    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-    if not os.path.isfile(cache_path):
-        import urllib.request
-        print(f"Downloading AudioSet class labels -> {cache_path} ...")
-        urllib.request.urlretrieve(AUDIOSET_LABELS_URL, cache_path)
-
-    idx_to_name = {}
-    with open(cache_path, newline="") as f:
-        reader = csv.reader(f)
-        next(reader)
-        for row in reader:
-            idx_str, _mid, display = row[0].strip(), row[1].strip(), row[2].strip()
-            idx_to_name[int(idx_str)] = display.strip('"')
-    return idx_to_name
+from audio.audio_classifier import build_classifier
+from dense_audio_classifier.data.irmas import INSTRUMENTS
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Test AST classifier on audio-diffusion spectrograms")
+        description="Test DenseAudioClassifier on audio-diffusion spectrograms")
     parser.add_argument("--num_samples", type=int, default=10,
                         help="Number of samples to classify")
     parser.add_argument("--top_k", type=int, default=10,
@@ -54,8 +24,12 @@ def main():
                         help="Only show classes with P > threshold "
                              "(overrides --top_k when > 0)")
     parser.add_argument("--gpu", type=str, default="0")
-    parser.add_argument("--ast_model_id", type=str,
-                        default="MIT/ast-finetuned-audioset-10-10-0.4593")
+    parser.add_argument("--checkpoint_path", type=str, default="",
+                        help="Path to DenseAudioClassifier checkpoint (.ckpt)")
+    parser.add_argument("--wandb_artifact", type=str, default="",
+                        help="W&B artifact reference: entity/project/artifact:version")
+    parser.add_argument("--num_classes", type=int, default=len(INSTRUMENTS),
+                        help="Number of output classes in checkpoint")
     parser.add_argument("--dataset_repo", type=str,
                         default="teticio/audio-diffusion-breaks-256")
     args = parser.parse_args()
@@ -63,11 +37,14 @@ def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 
-    idx_to_name = load_audioset_index_to_name()
+    idx_to_name = {i: name for i, name in enumerate(INSTRUMENTS)}
 
     print("Loading classifier ...")
-    ensure_hf_model_downloaded(args.ast_model_id)
-    classifier = build_classifier(ast_model_id=args.ast_model_id).to(device)
+    classifier = build_classifier(
+        checkpoint_path=args.checkpoint_path or None,
+        num_classes=args.num_classes,
+        wandb_artifact=args.wandb_artifact or None,
+    ).to(device)
     classifier.eval()
 
     dataset = AudioDiffusionBreaksDataset(

@@ -153,6 +153,76 @@ mpiexec -n N python celeba-train-diffusion.py $TRAIN_FLAGS \
 sbatch --export=ALL,ENVIRONMENT_ROOT=/gpfs/users/sassis/mva-DiME/.venv slurm/fit.sh
 ```
 
+## Audio Pipeline (Dense Classifier)
+
+The audio counterfactual pipeline now uses a trained
+`DenseAudioClassifier` checkpoint (Lightning `.ckpt`) instead of the
+pretrained AST classifier.
+
+### Train the dense audio classifier
+
+Train on IRMAS:
+
+```bash
+python scripts/train_classifier.py
+```
+
+Train on OpenMIC:
+
+```bash
+python scripts/train_classifier_openmic.py
+```
+
+Checkpoints are saved under `checkpoints/`.
+
+### Run audio counterfactual generation
+
+Using a local checkpoint:
+
+```bash
+python -m audio.main_audio \
+  --classifier_checkpoint_path checkpoints/last.ckpt \
+  --num_classes 12 \
+  --dataset_repo teticio/audio-diffusion-breaks-256
+```
+
+Using a Weights & Biases artifact:
+
+```bash
+python -m audio.main_audio \
+  --classifier_checkpoint_path "" \
+  --wandb_artifact entity/project/artifact_name:latest \
+  --num_classes 12
+```
+
+You can also pass a `wandb://` URI via `--classifier_checkpoint_path`:
+
+```bash
+python -m audio.main_audio \
+  --classifier_checkpoint_path wandb://entity/project/artifact_name:latest \
+  --num_classes 12
+```
+
+### Test classifier predictions on audio spectrograms
+
+With a local checkpoint:
+
+```bash
+python -m audio.test_classifier \
+  --checkpoint_path checkpoints/last.ckpt \
+  --num_classes 12 \
+  --num_samples 10
+```
+
+With a W&B artifact:
+
+```bash
+python -m audio.test_classifier \
+  --wandb_artifact entity/project/artifact_name:latest \
+  --num_classes 12 \
+  --num_samples 10
+```
+
 ## Citation
 
 If you found useful our code, please cite our work.

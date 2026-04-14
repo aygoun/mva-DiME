@@ -10,7 +10,7 @@ This module extends DiME to the **audio modality**. It generates counterfactual 
 |-----------|----------|-----------------|
 | Diffusion model | [`teticio/audio-diffusion-breaks-256`](https://huggingface.co/teticio/audio-diffusion-breaks-256) | None (pretrained) |
 | Dataset | [`teticio/audio-diffusion-breaks-256`](https://huggingface.co/datasets/teticio/audio-diffusion-breaks-256) — 30k breakbeat spectrograms | None (auto-download) |
-| Classifier | [`MIT/ast-finetuned-audioset-10-10-0.4593`](https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593) — AST on AudioSet (527 classes) | None (pretrained) |
+| Classifier | `DenseAudioClassifier` checkpoint (`.ckpt`) trained on IRMAS/OpenMIC | Yes (or download artifact) |
 | Spectrogram codec | [`diffusers.pipelines.deprecated.audio_diffusion.Mel`](https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/deprecated/audio_diffusion/mel.py) | — |
 | Perceptual loss | PANNs CNN14 — audio-native, 1-channel ([Zenodo](https://zenodo.org/record/3987831)) | None (pretrained, auto-download) |
 | Audio inversion | Griffin-Lim via the `Mel` class | — |
@@ -36,7 +36,11 @@ Inherited from the `Mel` class — identical to the audio-diffusion training pip
 uv sync --extra audio
 ```
 
-Everything (model, dataset, classifier) auto-downloads on first run.
+Diffusion model and dataset auto-download on first run.  
+Classifier must be provided as either:
+
+- local checkpoint via `--classifier_checkpoint_path`
+- W&B artifact via `--wandb_artifact` or `wandb://...` URI
 
 ## Run
 
@@ -44,11 +48,25 @@ Everything (model, dataset, classifier) auto-downloads on first run.
 python -W ignore -m audio.main_audio \
     --ddpm_repo teticio/audio-diffusion-breaks-256 \
     --dataset_repo teticio/audio-diffusion-breaks-256 \
+    --classifier_checkpoint_path checkpoints/last.ckpt \
+    --num_classes 12 \
     --max_samples 200 \
     --output_path audio/results --exp_name breaks_demo \
     --target_strategy random_remove \
     --start_step 120 --classifier_scales '5,8,12' \
     --num_batches 5 --gpu 0
+```
+
+Using W&B artifact instead of local checkpoint:
+
+```bash
+python -W ignore -m audio.main_audio \
+    --ddpm_repo teticio/audio-diffusion-breaks-256 \
+    --dataset_repo teticio/audio-diffusion-breaks-256 \
+    --classifier_checkpoint_path "" \
+    --wandb_artifact entity/project/artifact_name:latest \
+    --num_classes 12 \
+    --max_samples 200 --num_batches 5 --gpu 0
 ```
 
 Or use the helper script:
@@ -59,7 +77,7 @@ bash audio/test_audio.sh
 
 ## How target selection works
 
-Since the dataset has **no labels**, the AST classifier's own predictions serve as pseudo-ground-truth. Classes with `sigmoid > 0.5` are treated as "present".
+Since the dataset has **no labels**, the classifier's own predictions serve as pseudo-ground-truth. Classes with `sigmoid > 0.5` are treated as "present".
 
 | Strategy | Direction | Description |
 |----------|-----------|-------------|
@@ -67,7 +85,7 @@ Since the dataset has **no labels**, the AST classifier's own predictions serve 
 | `least_confident_remove` | remove | Pick the least confident detected class |
 | `random_add` | add | Pick a random absent class and maximize its probability |
 
-Use `--target_label <audioset_idx>` to force a specific AudioSet class for all samples.
+Use `--target_label <class_idx>` to force a specific classifier class for all samples.
 
 ## Output
 
@@ -88,8 +106,11 @@ audio/results/breaks_demo/
 |----------|---------|-------------|
 | `--ddpm_repo` | `teticio/audio-diffusion-breaks-256` | HF repo for the diffusers DDPM |
 | `--dataset_repo` | `teticio/audio-diffusion-breaks-256` | HF dataset repo |
+| `--classifier_checkpoint_path` | `checkpoints/last.ckpt` | Local checkpoint path, or `wandb://...` URI |
+| `--wandb_artifact` | `""` | W&B artifact ref: `entity/project/artifact:version` |
+| `--num_classes` | `12` | Number of output classes in the loaded checkpoint |
 | `--max_samples` | `0` (all) | Cap dataset size for quick tests |
-| `--target_label` | `-1` | Fixed AudioSet class index, or `-1` for auto |
+| `--target_label` | `-1` | Fixed classifier class index, or `-1` for auto |
 | `--target_strategy` | `random_remove` | See table above |
 | `--classifier_scales` | `5,8,12` | Gradient scales, tried in order |
 | `--start_step` | `120` | Noise depth τ (out of 1000 timesteps) |
@@ -104,7 +125,7 @@ audio/
 ├── spectrogram_utils.py    # Mel (diffusers) ↔ tensor ↔ audio
 ├── diffusers_wrapper.py    # DDPMScheduler/UNet2DModel → DiME API
 ├── audio_datasets.py       # HF dataset loader (no labels)
-├── audio_classifier.py     # ASTAudioSetClassifier (pretrained, 527 classes)
+├── audio_classifier.py     # DenseAudioClassifier loader (local/W&B checkpoint)
 ├── main_audio.py           # Counterfactual generation (main entry point)
 ├── evaluate_metrics.py     # Post-hoc metrics
 ├── cnn14_perceptual.py     # PANNs CNN14 perceptual loss (1-channel)
