@@ -3,7 +3,7 @@ __pycache__
 models
 .DS_Store
 dataset
-
+/audio/results
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

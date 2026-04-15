@@ -2,14 +2,14 @@
 Audio Counterfactual Explanations via DiME.
 
 Generates counterfactual mel spectrograms that flip a multi-label audio
-classifier's prediction for a **single** target class, using the
+classifier's prediction for one or more target classes, using the
 diffusion-guided process from DiME.
+
+Supports sequential counterfactuals: e.g., remove 'guitar' then add 'drums'.
 
 DDPM      : teticio/audio-diffusion-breaks-256 (diffusers, 1-ch 256×256)
 Classifier: DenseAudioClassifier checkpoint (multi-label sigmoid output)
 Dataset   : teticio/audio-diffusion-breaks-256 (pre-computed spectrograms)
-
-Use-case  : remove / add a sound in music  (e.g. remove guitar, add drums).
 """
 
 import os
@@ -18,6 +18,7 @@ import random
 import argparse
 import numpy as np
 import soundfile as sf
+import json
 
 from time import time
 
@@ -69,8 +70,8 @@ def create_args():
         # sampling
         classifier_scales="5,8,12",
         seed=42,
-        target_label=-1,
-        target_strategy="random_add",
+        target_labels="", # Comma-separated list of "class_idx:direction" (0=remove, 1=add)
+        target_strategy="random_remove",
         start_step=120,
         use_logits=False,
         l1_loss=0.05,
@@ -83,6 +84,7 @@ def create_args():
         # output
         save_audio=True,
         save_images=True,
+        save_intermediate=False,
     )
     parser = argparse.ArgumentParser(
         description="Audio counterfactual explanations via DiME")
@@ -117,39 +119,33 @@ def save_spectrogram_image(tensor, path):
 
 
 # ------------------------------------------------------------------
-# Target selection (works without ground-truth labels)
+# Target selection
 # ------------------------------------------------------------------
 
-def select_targets(logits, strategy, fixed_label=-1):
-    """Pick one target class per sample and the desired direction.
-
-    Uses the classifier's own sigmoid predictions as pseudo-labels:
-    classes with P > 0.5 are treated as "present".
-
-    Returns
-    -------
-    targets : (B,) LongTensor — class indices
-    y_vals  : (B,) FloatTensor — 1.0 = add class, 0.0 = remove class
+def select_targets(logits, strategy, fixed_targets=None):
+    """Pick target classes and directions.
+    
+    fixed_targets: list of (class_idx, direction) where direction is 0.0 or 1.0
     """
     B, num_classes = logits.shape
     device = logits.device
+    probs = torch.sigmoid(logits.detach())
+    
+    if fixed_targets:
+        # For sequential, we might want to return all targets at once or one by one.
+        # Here we return a list of (targets_tensor, y_vals_tensor) for each step.
+        steps = []
+        for class_idx, direction in fixed_targets:
+            targets = torch.full((B,), class_idx, dtype=torch.long, device=device)
+            y_vals = torch.full((B,), direction, dtype=torch.float32, device=device)
+            steps.append((targets, y_vals))
+        return steps
+
+    # Default strategy (single step)
     targets = torch.zeros(B, dtype=torch.long, device=device)
     y_vals = torch.ones(B, dtype=torch.float32, device=device)
-    probs = torch.sigmoid(logits.detach())
-
     for i in range(B):
         positive = (probs[i] > 0.5).nonzero(as_tuple=True)[0].tolist()
-
-        if fixed_label >= 0:
-            if fixed_label >= num_classes:
-                raise ValueError(
-                    f"target_label={fixed_label} is out of range for classifier with "
-                    f"{num_classes} classes."
-                )
-            targets[i] = fixed_label
-            y_vals[i] = 0.0 if fixed_label in positive else 1.0
-            continue
-
         if strategy == "random_remove" and positive:
             c = random.choice(positive)
             targets[i] = c
@@ -173,8 +169,7 @@ def select_targets(logits, strategy, fixed_label=-1):
                 c = random.choice(positive)
                 targets[i] = c
                 y_vals[i] = 0.0
-
-    return targets, y_vals
+    return [(targets, y_vals)]
 
 
 # ------------------------------------------------------------------
@@ -187,11 +182,24 @@ def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
+    
     exp_dir = os.path.join(args.output_path, args.exp_name)
     os.makedirs(exp_dir, exist_ok=True)
-    for sub in ["original_spec", "cf_spec", "diff_spec",
-                 "original_wav", "cf_wav", "info"]:
-        os.makedirs(os.path.join(exp_dir, sub), exist_ok=True)
+    
+    # Sequential targets
+    fixed_targets = []
+    if args.target_labels:
+        for item in args.target_labels.split(","):
+            c_idx, c_dir = item.split(":")
+            fixed_targets.append((int(c_idx), float(c_dir)))
+    
+    num_steps = len(fixed_targets) if fixed_targets else 1
+    
+    for s in range(num_steps):
+        step_dir = os.path.join(exp_dir, f"step_{s}")
+        for sub in ["original_spec", "cf_spec", "diff_spec",
+                     "original_wav", "cf_wav", "info"]:
+            os.makedirs(os.path.join(step_dir, sub), exist_ok=True)
 
     torch.manual_seed(args.seed)
     random.seed(args.seed)
@@ -218,7 +226,7 @@ def main():
     ).to(device)
     classifier.eval()
 
-    # ---- perceptual loss (CNN14 — native 1-channel) ----
+    # ---- perceptual loss ----
     if args.l_perc != 0:
         print("Loading perceptual loss (CNN14) ...")
         perceptual_loss = CNN14PerceptualLoss(
@@ -231,12 +239,6 @@ def main():
     sample_fn = get_DiME_iterative_sampling(use_sampling=args.use_sampling_on_x_t)
     classifier_scales = [float(x) for x in args.classifier_scales.split(",")]
 
-    stats = {
-        "n": 0, "flipped": 0, "clean_positive": 0,
-        "l1": [], "l2": [],
-        "target_conf_before": [], "target_conf_after": [],
-    }
-
     print("Starting counterfactual generation ...")
     start_time = time()
     global_idx = 0
@@ -245,183 +247,148 @@ def main():
     for batch_idx, (specs, indices) in enumerate(loader):
         if batch_idx >= args.num_batches:
             break
-        now = time()
-        elapsed = int(now - start_time)
-        batch_time = int(now - batch_start)
-        batch_start = now
-        print(f"\nBatch {batch_idx+1}/{min(args.num_batches, len(loader))} "
-              f"| total {elapsed}s"
-              + (f" | last batch {batch_time}s" if batch_idx > 0 else ""))
-
+        
         specs = specs.to(device)
-
-        # ---- classifier prediction (serves as pseudo-ground-truth) ----
+        current_specs = specs.clone()
+        
         with torch.no_grad():
-            logits = classifier(specs)
-
-        # ---- choose target ----
-        targets, y_vals = select_targets(
-            logits, args.target_strategy, fixed_label=args.target_label,
-        )
-        probs_before = torch.sigmoid(logits.detach())
-
-        # ---- forward noise + guided reverse ----
-        t = torch.ones(specs.size(0), device=device,
-                       dtype=torch.long) * args.start_step
-        noise_img = diffusion.q_sample(specs, t)
-        transformed = torch.zeros(specs.size(0), device=device).bool()
-        cf = specs.clone()
-
-        for jdx, cls_scale in enumerate(classifier_scales):
-            mask = ~transformed
-            if mask.sum() == 0:
-                break
-
-            model_kwargs = {"y": targets[mask]}
-            grad_kwargs = {
-                "y": targets[mask],
-                "classifier": classifier,
-                "s": cls_scale,
-                "use_logits": args.use_logits,
-                "y_val": y_vals[mask],
-            }
-
-            cfs, _, _ = sample_fn(
-                diffusion,
-                model_fn,
-                specs[mask].shape,
-                args.start_step,
-                specs[mask],
-                t,
-                z_t=noise_img[mask],
-                clip_denoised=args.clip_denoised,
-                model_kwargs=model_kwargs,
-                device=device,
-                class_grad_fn=clean_multilabel_cond_fn,
-                class_grad_kwargs=grad_kwargs,
-                dist_grad_fn=dist_cond_fn,
-                dist_grad_kargs={
-                    "l1_loss": args.l1_loss,
-                    "l2_loss": args.l2_loss,
-                    "l_perc": perceptual_loss,
-                },
-                guided_iterations=args.guided_iterations,
-                is_x_t_sampling=False,
-            )
-
+            initial_logits = classifier(specs)
+        
+        target_steps = select_targets(initial_logits, args.target_strategy, fixed_targets)
+        
+        # Track original for each step if needed, but here "original" for step > 0 
+        # is the CF from previous step.
+        
+        for s_idx, (targets, y_vals) in enumerate(target_steps):
+            step_dir = os.path.join(exp_dir, f"step_{s_idx}")
+            
             with torch.no_grad():
-                cf_logits = classifier(cfs)
+                logits_before = classifier(current_specs)
+                probs_before = torch.sigmoid(logits_before)
+            
+            t = torch.ones(current_specs.size(0), device=device,
+                           dtype=torch.long) * args.start_step
+            noise_img = diffusion.q_sample(current_specs, t)
+            transformed = torch.zeros(current_specs.size(0), device=device).bool()
+            cf = current_specs.clone()
 
-            cf_probs = torch.sigmoid(cf_logits)
-            orig_active = (y_vals[mask] < 0.5)
-            flipped = torch.zeros(mask.sum(), device=device).bool()
-            flipped[orig_active] = cf_probs[orig_active, :].gather(
-                1, targets[mask][orig_active].unsqueeze(1)
-            ).squeeze(1) < 0.5
-            flipped[~orig_active] = cf_probs[~orig_active, :].gather(
-                1, targets[mask][~orig_active].unsqueeze(1)
-            ).squeeze(1) > 0.5
+            for jdx, cls_scale in enumerate(classifier_scales):
+                mask = ~transformed
+                if mask.sum() == 0:
+                    break
 
-            if jdx == 0:
-                cf = cfs.clone() if mask.all() else cf.clone()
-            cf[mask] = cfs
+                model_kwargs = {"y": targets[mask]}
+                grad_kwargs = {
+                    "y": targets[mask],
+                    "classifier": classifier,
+                    "s": cls_scale,
+                    "use_logits": args.use_logits,
+                    "y_val": y_vals[mask],
+                }
 
-            old_mask = mask.clone()
-            transformed[old_mask] = flipped
+                cfs, x_t_steps, _ = sample_fn(
+                    diffusion,
+                    model_fn,
+                    current_specs[mask].shape,
+                    args.start_step,
+                    current_specs[mask],
+                    t,
+                    z_t=noise_img[mask],
+                    clip_denoised=args.clip_denoised,
+                    model_kwargs=model_kwargs,
+                    device=device,
+                    class_grad_fn=clean_multilabel_cond_fn,
+                    class_grad_kwargs=grad_kwargs,
+                    dist_grad_fn=dist_cond_fn,
+                    dist_grad_kargs={
+                        "l1_loss": args.l1_loss,
+                        "l2_loss": args.l2_loss,
+                        "l_perc": perceptual_loss,
+                    },
+                    guided_iterations=args.guided_iterations,
+                    is_x_t_sampling=False,
+                )
 
-        # ---- evaluate ----
-        with torch.no_grad():
-            cf_logits = classifier(cf)
-            cf_probs = torch.sigmoid(cf_logits)
+                if args.save_intermediate:
+                    # Save intermediate steps for Figure 3
+                    for i in range(specs.size(0)):
+                        idx_str = f"{global_idx + i:06d}"
+                        inter_dir = os.path.join(step_dir, "intermediate", idx_str)
+                        os.makedirs(inter_dir, exist_ok=True)
+                        for step_idx, xt in enumerate(x_t_steps):
+                            save_spectrogram_image(xt[i:i+1], os.path.join(inter_dir, f"step_{step_idx:03d}.png"))
 
-        specs_01 = (specs + 1) / 2
-        cf_01 = (cf.clamp(-1, 1) + 1) / 2
-        l1 = (specs_01 - cf_01).abs().view(specs.size(0), -1).mean(dim=1)
-        l2 = ((specs_01 - cf_01) ** 2).view(specs.size(0), -1).mean(dim=1).sqrt()
+                with torch.no_grad():
+                    cf_logits = classifier(cfs)
+                cf_probs = torch.sigmoid(cf_logits)
+                
+                orig_active = (y_vals[mask] < 0.5)
+                flipped = torch.zeros(mask.sum(), device=device).bool()
+                flipped[orig_active] = cf_probs[orig_active, :].gather(
+                    1, targets[mask][orig_active].unsqueeze(1)
+                ).squeeze(1) < 0.5
+                flipped[~orig_active] = cf_probs[~orig_active, :].gather(
+                    1, targets[mask][~orig_active].unsqueeze(1)
+                ).squeeze(1) > 0.5
 
-        bidx = torch.arange(specs.size(0), device=device)
-        target_conf_before = probs_before[bidx, targets]
-        target_conf_after = cf_probs[bidx, targets]
+                if jdx == 0:
+                    cf = cfs.clone() if mask.all() else cf.clone()
+                cf[mask] = cfs
+                transformed[mask] = flipped
 
-        is_remove = (y_vals < 0.5)
-        flipped_final = torch.zeros(specs.size(0), device=device).bool()
-        flipped_final[is_remove] = (target_conf_after[is_remove] < 0.5)
-        flipped_final[~is_remove] = (target_conf_after[~is_remove] > 0.5)
-        clean_positive = (target_conf_before > 0.5).sum().item()
+            # Evaluate this step
+            with torch.no_grad():
+                cf_logits = classifier(cf)
+                cf_probs = torch.sigmoid(cf_logits)
+            
+            # Save outputs for this step
+            for i in range(specs.size(0)):
+                idx_str = f"{global_idx + i:06d}"
+                
+                if args.save_images:
+                    save_spectrogram_image(
+                        current_specs[i], os.path.join(step_dir, "original_spec", f"{idx_str}.png"))
+                    save_spectrogram_image(
+                        cf[i], os.path.join(step_dir, "cf_spec", f"{idx_str}.png"))
+                    diff = (cf[i] - current_specs[i]).abs()
+                    save_spectrogram_image(
+                        diff, os.path.join(step_dir, "diff_spec", f"{idx_str}.png"))
 
-        stats["n"] += specs.size(0)
-        stats["flipped"] += flipped_final.sum().item()
-        stats["clean_positive"] += clean_positive
-        stats["l1"].append(l1.cpu())
-        stats["l2"].append(l2.cpu())
-        stats["target_conf_before"].append(target_conf_before.cpu())
-        stats["target_conf_after"].append(target_conf_after.cpu())
+                if args.save_audio:
+                    try:
+                        orig_wav = tensor_to_audio(current_specs[i])
+                        sf.write(os.path.join(step_dir, "original_wav", f"{idx_str}.wav"),
+                                 orig_wav, SAMPLE_RATE)
+                        cf_wav = tensor_to_audio(cf[i])
+                        sf.write(os.path.join(step_dir, "cf_wav", f"{idx_str}.wav"),
+                                 cf_wav, SAMPLE_RATE)
+                    except Exception as e:
+                        print(f"  Warning: audio inversion failed for {idx_str}: {e}")
 
-        # ---- save outputs ----
-        for i in range(specs.size(0)):
-            idx_str = f"{global_idx:06d}"
+                l1 = (current_specs[i] - cf[i]).abs().mean().item()
+                direction = "remove" if y_vals[i] < 0.5 else "add"
+                
+                info = {
+                    "target_class": targets[i].item(),
+                    "direction": direction,
+                    "target_conf_before": probs_before[i, targets[i]].item(),
+                    "target_conf_after": cf_probs[i, targets[i]].item(),
+                    "flipped": (cf_probs[i, targets[i]] < 0.5 if direction == "remove" else cf_probs[i, targets[i]] > 0.5).item(),
+                    "l1": l1,
+                    "all_probs_before": probs_before[i].tolist(),
+                    "all_probs_after": cf_probs[i].tolist(),
+                }
+                with open(os.path.join(step_dir, "info", f"{idx_str}.json"), "w") as f:
+                    json.dump(info, f, indent=2)
 
-            if args.save_images:
-                save_spectrogram_image(
-                    specs[i], os.path.join(exp_dir, "original_spec", f"{idx_str}.png"))
-                save_spectrogram_image(
-                    cf[i], os.path.join(exp_dir, "cf_spec", f"{idx_str}.png"))
-                diff = (cf[i] - specs[i]).abs()
-                save_spectrogram_image(
-                    diff, os.path.join(exp_dir, "diff_spec", f"{idx_str}.png"))
+            # Prepare for next step
+            current_specs = cf.clone()
 
-            if args.save_audio:
-                try:
-                    orig_wav = tensor_to_audio(specs[i])
-                    sf.write(os.path.join(exp_dir, "original_wav", f"{idx_str}.wav"),
-                             orig_wav, SAMPLE_RATE)
-                    cf_wav = tensor_to_audio(cf[i])
-                    sf.write(os.path.join(exp_dir, "cf_wav", f"{idx_str}.wav"),
-                             cf_wav, SAMPLE_RATE)
-                except Exception as e:
-                    print(f"  Warning: audio inversion failed for {idx_str}: {e}")
+        global_idx += specs.size(0)
+        now = time()
+        print(f"Batch {batch_idx+1} done | total {int(now - start_time)}s")
 
-            direction = "remove" if y_vals[i] < 0.5 else "add"
-            info = (
-                f"target_class: {targets[i].item()}\n"
-                f"direction: {direction}\n"
-                f"target_conf_before: {target_conf_before[i].item():.4f}\n"
-                f"target_conf_after: {target_conf_after[i].item():.4f}\n"
-                f"flipped: {flipped_final[i].item()}\n"
-                f"l1: {l1[i].item():.4f}\n"
-                f"l2: {l2[i].item():.4f}\n"
-            )
-            with open(os.path.join(exp_dir, "info", f"{idx_str}.txt"), "w") as f:
-                f.write(info)
-
-            global_idx += 1
-
-    # ---- summary ----
-    all_l1 = torch.cat(stats["l1"]).numpy()
-    all_l2 = torch.cat(stats["l2"]).numpy()
-    all_tcb = torch.cat(stats["target_conf_before"]).numpy()
-    all_tca = torch.cat(stats["target_conf_after"]).numpy()
-    flip_rate = stats["flipped"] / max(stats["n"], 1)
-    clean_rate = stats["clean_positive"] / max(stats["n"], 1)
-
-    summary = (
-        f"DDPM: {args.ddpm_repo}\n"
-        f"Dataset: {args.dataset_repo}\n"
-        f"Classifier checkpoint: {args.classifier_checkpoint_path}\n"
-        f"Target strategy: {args.target_strategy}\n"
-        f"Total samples: {stats['n']}\n"
-        f"Clean positive rate: {100*clean_rate:.1f}%\n"
-        f"Flip rate:           {100*flip_rate:.1f}%\n"
-        f"Mean L1:             {all_l1.mean():.4f}\n"
-        f"Mean L2:             {all_l2.mean():.4f}\n"
-        f"Target conf before:  {all_tcb.mean():.4f}\n"
-        f"Target conf after:   {all_tca.mean():.4f}\n"
-        f"Target conf change:  {(all_tca - all_tcb).mean():.4f}\n"
-    )
-    print("\n" + summary)
-
-    with open(os.path.join(exp_dir, "summary.txt"), "w") as f:
-        f.write(summary)
+    print(f"\nGeneration complete. Results saved to {exp_dir}")
 
 
 if __name__ == "__main__":
