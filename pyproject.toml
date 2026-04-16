@@ -40,6 +40,13 @@ authors = [
 Homepage = "https://github.com/aygoun/mva-DiME"
 Source = "https://github.com/aygoun/mva-DiME"
 
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [project.optional-dependencies]
 audio = [
     "librosa",
@@ -72,9 +79,7 @@ mypy_path = './src'
 [tool.uv]
 package = true
 
-
 [tool.uv.sources]
-dense_audio_classifier = { path = "src", editable = true }
 microsoft-python-type-stubs = { git = "https://github.com/microsoft/python-type-stubs.git" }
 torch = [
   { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
