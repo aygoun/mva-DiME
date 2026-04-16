@@ -1,3 +1,24 @@
+"""
+Fréchet Audio Distance (FAD) between reference and counterfactual WAV folders.
+
+Use-case (same layout as ``evaluate_similarity``)
+-------------------------------------------------
+``--ref_dir`` should contain the real / original clips; ``--cf_dir`` the
+counterfactuals. Same pairing rules: matching filenames per step.
+
+From the repo root, example for ``step_0``::
+
+    python audio/evaluate_fad.py \\
+        --ref_dir audio/results/guitar_removal_hq/step_0/original_wav \\
+        --cf_dir  audio/results/guitar_removal_hq/step_0/cf_wav \\
+        --model vggish
+
+For ``guitar_removal_hq`` with ``step_0`` … ``step_5``, run once per step (six
+``--ref_dir`` / ``--cf_dir`` pairs) or automate with a loop over ``k``.
+
+Optional: ``--model`` in ``{vggish,pann,clap}``, ``--figures_dir``, ``--latex_out``.
+"""
+
 import argparse
 import os
 import sys

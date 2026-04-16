@@ -1,3 +1,24 @@
+"""
+Mean cosine similarity between original and counterfactual waveforms (embedding model).
+
+Use-case (pair ``original_wav`` with ``cf_wav`` for one step)
+--------------------------------------------------------------
+Pick the same step folder as in ``evaluate_metrics_v2``. Filenames must match
+in both directories (e.g. ``000000.wav`` in both).
+
+From the repo root, example for ``step_0``::
+
+    python audio/evaluate_similarity.py \\
+        --ref_dir audio/results/guitar_removal_hq/step_0/original_wav \\
+        --cf_dir  audio/results/guitar_removal_hq/step_0/cf_wav
+
+Repeat for ``step_1`` … ``step_5`` by changing the ``step_<k>`` segment (six
+steps in the current ``guitar_removal_hq`` layout means six runs, or wrap in a
+shell loop over ``k``).
+
+Optional: ``--figures_dir``, ``--latex_out``, ``--model`` (see ``--help``).
+"""
+
 import argparse
 import os
 import sys

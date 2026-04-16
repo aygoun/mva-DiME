@@ -8,6 +8,24 @@ Reads an experiment folder produced by `audio.main_audio` and computes:
 - Audio metrics (if wav files are present):
   - SNR (dB): higher means smaller perturbation
   - Log-spectral distance (LSD): lower is better
+
+Use-case (flat layout, ``info/*.txt`` from ``main_audio``)
+---------------------------------------------------------
+From the repo root, point ``--exp_dir`` at the folder that directly contains
+``info/``, ``original_wav/``, and ``cf_wav/``::
+
+    python audio/evaluate_metrics.py \\
+        --exp_dir audio/results/audio_cf \\
+        --compute_audio_metrics
+
+WAV paths (same parent as ``info/``)::
+
+    audio/results/audio_cf/original_wav/*.wav
+    audio/results/audio_cf/cf_wav/*.wav
+
+Multi-step runs (e.g. ``guitar_removal_hq/step_0`` … ``step_5``) store
+``info/*.json``, not ``.txt``. Use ``audio/evaluate_metrics_v2.py`` for those;
+this script is only for the legacy flat export from ``main_audio``.
 """
 
 import os

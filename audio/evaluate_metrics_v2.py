@@ -1,3 +1,29 @@
+"""
+Aggregate metrics for multi-step counterfactual runs (JSON sidecars).
+
+Reads ``step_<k>/info/*.json`` under an experiment directory and writes a LaTeX
+table under ``report/figures/`` by default.
+
+Use-case (e.g. ``guitar_removal_hq`` with step_0 … step_5)
+----------------------------------------------------------
+Count how many steps you have (folders ``step_0``, ``step_1``, …). The
+``--steps`` argument is the **count** of steps to scan: for ``step_0`` through
+``step_5`` inclusive, pass ``--steps 6`` (indices ``0 .. steps-1``).
+
+From the repo root::
+
+    python audio/evaluate_metrics_v2.py \\
+        --exp_dir audio/results/guitar_removal_hq \\
+        --steps 6
+
+Per-step WAV directories (example for ``step_0``)::
+
+    audio/results/guitar_removal_hq/step_0/original_wav/*.wav
+    audio/results/guitar_removal_hq/step_0/cf_wav/*.wav
+
+Optional: ``--figures_dir`` / ``--latex_out`` (see ``--help``).
+"""
+
 import argparse
 import json
 import os
