@@ -16,6 +16,7 @@
 \usepackage{theme}
 \usepackage{shortcuts}
 \usepackage{stmaryrd}
+\usepackage{booktabs}
 \usepackage[figurename=Fig.,font=small,labelfont=bf,labelsep=space]{caption}
 \addbibresource{references.bib}
 
@@ -27,8 +28,15 @@ Counterfactual Explanations:\\an Application to audio}
   Simon Sassi \email{sassisimon84@gmail.com} % student 2
 }
 
+\setcounter{page}{0}
+
 \begin{document}
 \maketitle
+\thispagestyle{empty}
+\tableofcontents
+
+\newpage
+%\pagestyle{plain}
 
 \section{Introduction}
 
@@ -270,6 +278,11 @@ maps the energy of the signal according to the mel scale,
 approximating human pitch perception. This means that, instead of
 using 3 channels images were each pixel represents a RGB color, we
 are going to use 1 channel images representing magnitude of the signal.
+This single-channel representation comes with an important
+limitation: instrument harmonics overlap heavily in the frequency
+domain, meaning guitar and piano, for instance, cannot be cleanly
+separated by local edits to the spectrogram. This will inherently
+limit how specific our counterfactuals can be.
 
 \subsection{Pre-trained models}
 
@@ -304,6 +317,11 @@ visual similarity of spectrograms based on a natural image feature
 extractor does not strictly guarantee audio similarity. For this
 reason, we used the Pretrained Audio Neural Networks (PANNs) CNN-14,
 a feature extractor built specifically for handling spectrograms.
+However, CNN14 was designed for audio tagging, not similarity
+measurement. Its features encode semantic content rather than
+fine-grained acoustic texture. The perceptual term may end up
+competing with the classification guidance rather than complementing
+it. A contrastive audio encoder could have been better suited here.
 
 \subsection{Metrics}
 \label{sec:metrics}
@@ -327,8 +345,8 @@ original mel-spectrogram (treated as an image-like tensor), $\tilde{x}^{(i)}$
 its counterfactual, $w^{(i)}$ and $\tilde{w}^{(i)}$ the corresponding
 time-domain waveforms, and $p^{(i)}_k$ (resp.\ $\tilde{p}^{(i)}_k$) the
 classifier posterior probability for class $k$ before (resp.\ after).
-We denote by $y$ the target class and by $\tau$ the decision threshold
-(we use $\tau=0.5$). All reported values are averaged over $N$ samples.
+We denote by $y$ the target class and by $p$ the decision threshold
+(we use $p=0.5$). All reported values are averaged over $N$ samples.
 
 \paragraph{Flip ratio (\%).}
 This measures the fraction of samples for which the classifier decision
@@ -337,8 +355,8 @@ counterfactual:
 $
 \mathrm{Flip}(\%) \;=\;
 100 \cdot \frac{1}{N}\sum_{i=1}^{N}\mathbf{1}\!\left[
-  \mathbf{1}\!\left(p^{(i)}_{y}>\tau\right)\neq
-  \mathbf{1}\!\left(\tilde p^{(i)}_{y}>\tau\right)
+  \mathbf{1}\!\left(p^{(i)}_{y}> p \right)\neq
+  \mathbf{1}\!\left(\tilde p^{(i)}_{y}> p \right)
 \right].
 $
 A high flip ratio indicates that counterfactuals achieve the intended
@@ -359,8 +377,8 @@ $
 \mathrm{MNAC} \;=\;
 \frac{1}{N}\sum_{i=1}^{N}\;\sum_{k\neq y}
 \mathbf{1}\!\left[
-  \mathbf{1}\!\left(p^{(i)}_{k}>\tau\right)\neq
-  \mathbf{1}\!\left(\tilde p^{(i)}_{k}>\tau\right)
+  \mathbf{1}\!\left(p^{(i)}_{k}> p \right)\neq
+  \mathbf{1}\!\left(\tilde p^{(i)}_{k}> p \right)
 \right].
 $
 Lower MNAC means more class-specific counterfactual changes.
@@ -496,11 +514,10 @@ guitar, while the
 counterfactual is intended to remove it. Subjectively, we can confirm that the
 electric guitar and drums are less audible in the counterfactual,
 while other instruments
-are still present. The samples are available here:
-\href{https://github.com/aygoun/mva-DiME/raw/refs/heads/main/audio/results/guitar_removal_hq/step_0/original_wav/000000.wav}{original}
-and
-\href{https://github.com/aygoun/mva-DiME/raw/refs/heads/main/audio/results/guitar_removal_hq/step_5/cf_wav/000000.wav}{counterfactual
-at step 5 (after electric guitar removal)}.
+are still present. The samples are available here\footnote{original:
+\url{https://github.com/aygoun/mva-DiME/raw/refs/heads/main/audio/results/guitar_removal_hq/step_0/original_wav/000000.wav}}\footnote{counterfactual
+  at step 5 (after electric guitar removal):
+\url{https://github.com/aygoun/mva-DiME/raw/refs/heads/main/audio/results/guitar_removal_hq/step_5/cf_wav/000000.wav}}.
 In the counterfactual sample, the electric guitar "looks like" more a
 synthesizer / piano sound.
 Our result are not perfect, this could come from the perceptual loss
@@ -558,7 +575,7 @@ computed directly on available waveform pairs.
   \centering
   \caption{Embedding-based similarity and realism metrics computed on waveform
     pairs available for evaluation. Cosine similarity is computed between
-    embeddings of original and counterfactual waveforms; FAD compares the
+    embeddings of original and counterfactual waveforms. FAD compares the
   embedding distributions of original vs. counterfactual audio.}
   \label{tab:audio_embedding_metrics}
   \input{figures/eval_similarity_original_wav__cf_wav.tex}
@@ -615,10 +632,14 @@ diffusion model we found was trained specifically on music
 spectrograms, we finally adapted our pipeline from general sound
 classification to music-specific tasks. Furthermore, we could not
 find a suitable pre-trained classifier on this new domain, so we
-ended-up by training our own from scratch. As expected, combining a
-niche DDPM with a custom classifier led to poorer results than the
-original DiME framework, based on state-of-the-art models in the
-heavily studied area that is the face analysis.
+ended-up by training our own from scratch. Because other audio
+results do not exist it is hard to compare them, but we can think
+that combining a niche DDPM with a custom classifier led to poorer
+results than the original DiME framework, based on state-of-the-art
+models in the heavily studied area that is the face analysis.
+Finally, due to computational constraints, we were only able to
+evaluate on 8-10 samples per step, which is insufficient to draw
+statistically meaningful conclusions from the reported metrics.
 
 \newpage
 \printbibliography
