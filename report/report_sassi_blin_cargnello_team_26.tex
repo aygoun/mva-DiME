@@ -349,9 +349,7 @@ We quantify how close the counterfactual spectrogram remains to the
 original in pixel space:
 $
 \mathrm{L1\ Prox} \;=\; \frac{1}{N}\sum_{i=1}^{N}\left\lVert
-\tilde{x}^{(i)} - x^{(i)} \right\rVert_{1},
-$
-(optionally normalized by the number of pixels $HW$ if needed).
+\tilde{x}^{(i)} - x^{(i)} \right\rVert_{1}$.
 
 \paragraph{MNAC (Mean Number of Attributes Changed).}
 Because our classifier is multi-label, it is important to check whether
@@ -451,21 +449,21 @@ partially noised
 version $z_{\tau}\sim q(z_\tau\mid x)$ at timestep $\tau=160$ and run
 the reverse
 diffusion process to obtain a counterfactual $\tilde{x}$.
-Guidance is computed from a multi-label DenseNet121 classifier
-(trained on OpenMIC)
+Guidance is computed from the multi-label DenseNet121 classifier
 together with proximity regularization, combining an $\ell_1$ term (weight
 $\lambda_{\ell_1}=0.02$) and a CNN14-based perceptual term (weight
 $\lambda_p=20$).
 For classifier guidance, we use a scale $\lambda_c=100$.
 
-In the \texttt{guitar\_removal\_hq} run, targets are specified
-explicitly rather than
-sampled from pseudo-labels: we provide a sequence of target class indices with
+Our experiment task is to remove the electric guitar (and other instruments such
+as drums) from the input spectrogram,
+(the \texttt{guitar\_removal\_hq} run), targets are specified
+explicitly: we provide a sequence of target class indices with
 \texttt{--target\_labels} and set the desired direction to removal
 ($y_{\mathrm{val}}=0$),
 producing sequential counterfactual steps saved as \texttt{step\_0},
 \texttt{step\_1}.
-Moreover, we apply guidance only during the first 20 reverse steps (parameter
+We apply guidance only during the first 20 reverse steps (parameter
 \texttt{guided\_iterations}=20); the remaining denoising steps follow
 the unguided
 reverse diffusion dynamics.
@@ -493,13 +491,25 @@ the relatively small $\ell_1$ proximity values reported in
 \end{figure}
 
 We also listen to the reconstructed waveforms corresponding to the original and
-counterfactual spectrograms. The original sample contains a guitar, while the
+counterfactual spectrograms. The original sample contains a electric
+guitar, while the
 counterfactual is intended to remove it. Subjectively, we can confirm that the
-guitar is less audible in the counterfactual, while other instruments
+electric guitar and drums are less audible in the counterfactual,
+while other instruments
 are still present. The samples are available here:
 \href{https://github.com/aygoun/mva-DiME/raw/refs/heads/main/audio/results/guitar_removal_hq/step_0/original_wav/000000.wav}{original}
 and
-\href{https://github.com/aygoun/mva-DiME/raw/refs/heads/main/audio/results/guitar_removal_hq/step_5/cf_wav/000000.wav}{counterfactual}.
+\href{https://github.com/aygoun/mva-DiME/raw/refs/heads/main/audio/results/guitar_removal_hq/step_5/cf_wav/000000.wav}{counterfactual
+at step 5 (after electric guitar removal)}.
+In the counterfactual sample, the electric guitar "looks like" more a
+synthesizer / piano sound.
+Our result are not perfect, this could come from the perceptual loss
+not being perfectly adapted to the audio domain, as we reused a
+pre-trained model.
+Note that a step correspond to a class flip, so \texttt{step\_0} is
+the original sample and the first counterfactual, and
+\texttt{step\_5} is the final counterfactual
+after 5 flips (removing electric guitar, drums, etc.).
 
 \subsection{Quantitative results}
 
@@ -571,9 +581,7 @@ From a fidelity perspective, the relatively small L1 proximity values suggest
 that edits remain limited in spectrogram space (\autoref{tab:main_results}), and
 the embedding cosine similarity remains high
 (\autoref{tab:audio_embedding_metrics}), indicating that much of the global
-audio content is preserved in a learned audio representation. However, the
-non-zero FAD score highlights that counterfactuals are still detectably
-different from the reference audio distribution.
+audio content is preserved in a learned audio representation.
 
 Finally, the discrepancy between spectrogram-space proximity and waveform-based
 distortion metrics suggests that waveform reconstruction can be a bottleneck for
