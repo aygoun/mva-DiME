@@ -27,11 +27,10 @@ Counterfactual Explanations:\\an Application to audio}
   Simon Sassi \email{sassisimon84@gmail.com} % student 2
 }
 
-
 \begin{document}
 \maketitle
 
-\section{Introduction} % TODO
+\section{Introduction}
 
 Deep neural networks have achieved remarkable success across a wide
 variety of machine learning tasks, but their "black-box" nature
@@ -69,7 +68,6 @@ maintain the core architecture of the DiME pipeline while addressing
 the unique specificities of the audio domain. This modality
 transition need significant changes, as the original dataset, the
 pre-trained diffusion model and the guidance classifier.
-
 
 \section{Diffusion Models for Counterfactual Explanations}
 
@@ -287,7 +285,7 @@ and available on hugging face. It has been trained on 30000 samples
 from WhoSampled and YouTube, to generate mel spectrograms of size
 256x256 corresponding to 5 seconds of audio.
 
-\paragraph{Classifier} % TODO
+\paragraph{Classifier}
 Similarly, the guidance classifier $C(y|x_t)$ must be replaced to
 match the new domain. We keep the original DiME DenseNet121
 architecture, but trained on 5 seconds spectrograms from OpenMIC-2018
@@ -336,50 +334,50 @@ We denote by $y$ the target class and by $\tau$ the decision threshold
 This measures the fraction of samples for which the classifier decision
 for the \emph{target} class changes between the original and the
 counterfactual:
-$$
+$
 \mathrm{Flip}(\%) \;=\;
 100 \cdot \frac{1}{N}\sum_{i=1}^{N}\mathbf{1}\!\left[
   \mathbf{1}\!\left(p^{(i)}_{y}>\tau\right)\neq
   \mathbf{1}\!\left(\tilde p^{(i)}_{y}>\tau\right)
 \right].
-$$
+$
 A high flip ratio indicates that counterfactuals achieve the intended
 class change.
 
 \paragraph{$\ell_1$ proximity (L1 Prox).}
 We quantify how close the counterfactual spectrogram remains to the
 original in pixel space:
-$$
+$
 \mathrm{L1\ Prox} \;=\; \frac{1}{N}\sum_{i=1}^{N}\left\lVert
 \tilde{x}^{(i)} - x^{(i)} \right\rVert_{1},
-$$
+$
 (optionally normalized by the number of pixels $HW$ if needed).
 
 \paragraph{MNAC (Mean Number of Attributes Changed).}
 Because our classifier is multi-label, it is important to check whether
 non-target instruments are unintentionally modified. MNAC counts how many
 \emph{non-target} labels change their binary decision after thresholding:
-$$
+$
 \mathrm{MNAC} \;=\;
 \frac{1}{N}\sum_{i=1}^{N}\;\sum_{k\neq y}
 \mathbf{1}\!\left[
   \mathbf{1}\!\left(p^{(i)}_{k}>\tau\right)\neq
   \mathbf{1}\!\left(\tilde p^{(i)}_{k}>\tau\right)
 \right].
-$$
+$
 Lower MNAC means more class-specific counterfactual changes.
 
 \paragraph{SNR (dB).}
 In the time domain, we measure a signal-to-noise ratio between the
 original waveform and the counterfactual:
-$$
+$
 \mathrm{SNR(dB)} \;=\;
 10\log_{10}\!\left(
   \frac{\frac{1}{T}\sum_{t=1}^{T}\left(w^{(i)}_t\right)^2+\varepsilon}
   {\frac{1}{T}\sum_{t=1}^{T}\left(\tilde
   w^{(i)}_t-w^{(i)}_t\right)^2+\varepsilon}
 \right),
-$$
+$
 with a small constant $\varepsilon>0$ for numerical stability. Higher
 SNR indicates stronger waveform preservation.
 
@@ -387,27 +385,27 @@ SNR indicates stronger waveform preservation.
 We also report a spectral distortion measure based on STFT magnitudes.
 Let $S_w(f,m)$ denote the STFT magnitude at frequency bin $f$ and time
 frame $m$. Then:
-$$
+$
 \mathrm{LSD} \;=\;
 \frac{1}{M}\sum_{m=1}^{M}\sqrt{\frac{1}{F}\sum_{f=1}^{F}\left(
     20\log_{10}\!\left(\left|S_{w}(f,m)\right|+\varepsilon\right)
     -
     20\log_{10}\!\left(\left|S_{\tilde w}(f,m)\right|+\varepsilon\right)
 \right)^{2}}.
-$$
+$
 Lower LSD indicates closer spectra.
 
 \paragraph{Mean cosine similarity (embedding-based source preservation).}
 To better reflect perceptual similarity beyond sample-wise distances,
 we compute the cosine similarity between embeddings extracted from a
 pre-trained audio network $f(\cdot)$:
-$$
+$
 \mathrm{CosineSim} \;=\;
 \frac{1}{N}\sum_{i=1}^{N}
 \frac{\left\langle f(w^{(i)}),\,f(\tilde w^{(i)})\right\rangle}
 {\left\lVert f(w^{(i)})\right\rVert_{2}\;\left\lVert f(\tilde
 w^{(i)})\right\rVert_{2}}.
-$$
+$
 Higher values indicate better preservation of the original content in
 the embedding space.
 
@@ -416,16 +414,15 @@ Finally, we compute FAD by comparing the distribution of embeddings of
 reference audios and counterfactual audios. If $(\mu,\Sigma)$ and
 $(\tilde\mu,\tilde\Sigma)$ are the empirical mean and covariance of the
 reference and counterfactual embedding sets, respectively, then:
-$$
+$
 \mathrm{FAD} \;=\;
 \left\lVert \mu - \tilde\mu \right\rVert_{2}^{2}
 \;+\;
 \mathrm{Tr}\!\left(\Sigma+\tilde\Sigma-2\left(\Sigma\tilde\Sigma\right)^{1/2}\right).
-$$
+$
 Lower FAD indicates that counterfactuals are closer to the reference
 audio distribution in the chosen embedding space (e.g.\ VGGish).
 %
-
 
 \subsection{Overview of our experiment}
 
@@ -499,8 +496,10 @@ We also listen to the reconstructed waveforms corresponding to the original and
 counterfactual spectrograms. The original sample contains a guitar, while the
 counterfactual is intended to remove it. Subjectively, we can confirm that the
 guitar is less audible in the counterfactual, while other instruments
-are still present. The samples are available via \href{}{original}
-and \href{}{counterfactual}.
+are still present. The samples are available here:
+\href{https://github.com/aygoun/mva-DiME/raw/refs/heads/main/audio/results/guitar_removal_hq/step_0/original_wav/000000.wav}{original}
+and
+\href{https://github.com/aygoun/mva-DiME/raw/refs/heads/main/audio/results/guitar_removal_hq/step_5/cf_wav/000000.wav}{counterfactual}.
 
 \subsection{Quantitative results}
 
@@ -510,7 +509,7 @@ metrics per step (flip ratio, proximity, and waveform-based similarity). In
 addition, \autoref{tab:target_conf} reports target confidence statistics before
 and after the edit.
 
-\begin{table}[!ht]
+\begin{table}[H]
   \centering
   \caption{Main quantitative results for \texttt{guitar\_removal\_hq}.
     Flip Ratio measures success for the target edit; L1 Prox measures
@@ -520,7 +519,7 @@ and after the edit.
   \input{figures/main_results.tex}
 \end{table}
 
-\begin{table}[!ht]
+\begin{table}[H]
   \centering
   \caption{Per-step target-class evaluation for \texttt{guitar\_removal\_hq}.
     $P_{\mathrm{tgt}}$ denotes the classifier posterior probability
