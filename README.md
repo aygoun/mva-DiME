@@ -1,3 +1,5 @@
+> **Fork notice:** This repository **extends** the upstream [DiME](https://arxiv.org/abs/2203.15636) codebase with an **audio** counterpart: our experiments, tooling, and assets live under **`notebook/`**, **`src/`**, and **`audio/`**. The other paths are kept from the fork as the original image (CelebA) setup, so you can compare modalities or reproduce the paper baseline unchanged.
+
 # DiME's official code
 
 This is the codebase for the ACCV 2022 paper
